@@ -1,8 +1,8 @@
 # vergent's declarative session file (schema v3).
 #
 # Copy this to your plugin config dir and edit:
-#   mkdir -p "$(herdr plugin config-dir elifarley.vergent)"
-#   cp projects.example.toml "$(herdr plugin config-dir elifarley.vergent)/projects.toml"
+#   mkdir -p "$(herdr plugin config-dir cedarverse.vergent)"
+#   cp projects.example.toml "$(herdr plugin config-dir cedarverse.vergent)/projects.toml"
 #
 # Model (containment nests, all the way down):
 #   [[workspace]]          = a herdr Space  (matched by name; created if missing)

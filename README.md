@@ -3,7 +3,7 @@
 **Convergent sessions for [herdr](https://herdr.dev).** Declare your workspaces, tabs, and panes in one TOML file; at every server boot, vergent converges the running session to it.
 
 ```
-herdr plugin install elifarley/herdr-vergent
+herdr plugin install CedarVerse/herdr-vergent
 ```
 
 ✅ Idempotent by contract — a re-run against a converged session is a verified no-op
@@ -48,10 +48,10 @@ Full annotated example: [`projects.example.toml`](projects.example.toml) — rat
 ## Install & run
 
 ```sh
-herdr plugin install elifarley/herdr-vergent
-mkdir -p "$(herdr plugin config-dir elifarley.vergent)"
-cp projects.example.toml "$(herdr plugin config-dir elifarley.vergent)/projects.toml"
-$EDITOR "$(herdr plugin config-dir elifarley.vergent)/projects.toml"
+herdr plugin install CedarVerse/herdr-vergent
+mkdir -p "$(herdr plugin config-dir cedarverse.vergent)"
+cp projects.example.toml "$(herdr plugin config-dir cedarverse.vergent)/projects.toml"
+$EDITOR "$(herdr plugin config-dir cedarverse.vergent)/projects.toml"
 ```
 
 Then restart herdr (or run the seeder by hand: `bin/vergent.sh` from the plugin directory, `--dry-run` to preview). At boot the startup hook converges and exits; on live handoff it runs again — a no-op when state already matches.

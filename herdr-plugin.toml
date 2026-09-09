@@ -7,10 +7,10 @@
 # HERDR_PLUGIN_CONFIG_DIR (where your projects.toml lives), HERDR_PLUGIN_
 # STATE_DIR, and HERDR_SOCKET_PATH. See the README for the full contract.
 #
-# Install:  herdr plugin install elifarley/herdr-vergent
+# Install:  herdr plugin install CedarVerse/herdr-vergent
 # Verify:   herdr plugin list
 
-id = "elifarley.vergent"
+id = "cedarverse.vergent"
 name = "Vergent"
 version = "0.1.0"
 min_herdr_version = "0.8.2"
