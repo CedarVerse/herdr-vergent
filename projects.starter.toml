@@ -1,0 +1,30 @@
+# vergent -- your declarative herdr session (starter file)
+#
+# THIS FILE was written automatically on first run, because no config
+# existed yet. It is your real config now: edit it, and every herdr
+# restart converges the running session to it.
+#
+# This file lives at (absolute path):
+#
+#     __VERGENT_CONFIG_PATH__
+#
+# The "vergent-start-here" Space below exists so a pane could show you
+# this message. It is safe to close -- and it will NOT come back once
+# you replace this file's contents with your own workspaces (vergent
+# never deletes: you close it, it stays closed).
+#
+# Docs and the full annotated example:
+#     https://github.com/CedarVerse/herdr-vergent
+# Preview changes without touching the session:
+#     bin/vergent.sh --dry-run     (from the plugin directory)
+
+[[workspace]]
+name = "vergent-start-here"
+path = "~"
+
+[[workspace.tab]]
+name = "read me"
+
+[[workspace.tab.pane]]
+name = "welcome"
+command = "echo 'VERGENT: your session config lives at __VERGENT_CONFIG_PATH__'; echo 'Edit that file (its starter contents are printed below), then restart herdr -- or run bin/vergent.sh from the plugin directory to converge right now.'; echo 'This Space is safe to close; it will not return once you replace the file with your own workspaces.'; echo 'Docs: https://github.com/CedarVerse/herdr-vergent'; echo '--- starter config ---'; cat __VERGENT_CONFIG_PATH__"

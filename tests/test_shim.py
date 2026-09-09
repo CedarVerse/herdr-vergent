@@ -16,6 +16,7 @@ import subprocess
 import unittest
 
 SHIM = pathlib.Path(__file__).resolve().parents[1] / "bin" / "vergent.sh"
+STARTER = pathlib.Path(__file__).resolve().parents[1] / "projects.starter.toml"
 
 
 class ShimCase(unittest.TestCase):
@@ -49,6 +50,76 @@ class ShimCase(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("cannot resolve TOML path:", r.stderr)
         self.assertIn("/nonexistent-parent/dir/projects.toml", r.stderr)
+
+    # --- first-run starter (2026-09-09): absent config -> starter+welcome ----
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def _dead_socket_env(self):
+        """The shim's later stages (guard, probe, exec) may run in these
+        tests; HERDR_SOCKET_PATH pointed at nothing makes the exec'd python
+        fail harmlessly at connect -- AFTER the starter logic under test."""
+        import os
+        env = dict(os.environ)
+        env["HERDR_SOCKET_PATH"] = str(pathlib.Path(self.tmp) / "no-such.sock")
+        return env
+
+    def test_first_run_writes_starter_with_absolute_path(self):
+        """Absent DEFAULT config (no --toml; HERDR_PLUGIN_CONFIG_DIR set, the
+        plugin-runtime shape): the shim writes the starter under the config
+        dir with __VERGENT_CONFIG_PATH__ substituted to the RESOLVED
+        absolute path -- the welcome pane's message must name the real
+        file. The run then continues (exec fails at the dead socket; that
+        is expected and asserted to be the only failure)."""
+        cfgdir = pathlib.Path(self.tmp) / "cfg"
+        env = self._dead_socket_env()
+        env["HERDR_PLUGIN_CONFIG_DIR"] = str(cfgdir)
+        toml = cfgdir / "projects.toml"
+        r = subprocess.run(["bash", str(SHIM)],
+                           capture_output=True, text=True, timeout=60, env=env)
+        self.assertTrue(toml.exists(), "starter was not written")
+        self.assertIn("starter config written to", r.stdout)
+        body = toml.read_text()
+        self.assertNotIn("__VERGENT_CONFIG_PATH__", body)  # substituted
+        self.assertIn(str(toml), body)                     # absolute path present
+        self.assertEqual(body.count(str(toml)), 3)         # comment x2 + pane command
+        self.assertIn("vergent-start-here", body)          # the welcome Space
+
+    def test_existing_config_is_never_overwritten(self):
+        """The starter is gated on absence: an existing file (even a
+        sentinel one-liner) must survive byte-for-byte -- first-run logic
+        that clobbers user data would be worse than no onboarding."""
+        toml = pathlib.Path(self.tmp) / "projects.toml"
+        toml.write_text('sentinel = "mine"\n')
+        r = subprocess.run(["bash", str(SHIM), "--toml", str(toml)],
+                           capture_output=True, text=True, timeout=60,
+                           env=self._dead_socket_env())
+        self.assertEqual(toml.read_text(), 'sentinel = "mine"\n')
+        self.assertNotIn("starter config written", r.stdout)
+
+    def test_starter_template_loads_through_real_loader(self):
+        """The starter must be valid schema v3 the moment it is written:
+        one workspace, one tab, one pane carrying the welcome command (the
+        command one-shot delivers it exactly once -- no new machinery)."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "v_starter_test", str(SHIM.parents[1] / "bin" / "vergent.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        body = STARTER.read_text().replace(
+            "__VERGENT_CONFIG_PATH__", str(pathlib.Path(self.tmp) / "p.toml"))
+        target = pathlib.Path(self.tmp) / "resolved-starter.toml"
+        target.write_text(body)
+        model = m.load_model(str(target))
+        (ws,) = model["workspaces"]
+        (tab,) = ws["tabs"]
+        (pane,) = tab["panes"]
+        self.assertEqual((ws["label"], tab["label"], pane["name"]),
+                         ("vergent-start-here", "read me", "welcome"))
+        # the welcome names the config file it cats (substitution applied)
+        self.assertIn(str(pathlib.Path(self.tmp) / "p.toml"), pane["command"])
 
 
 if __name__ == "__main__":

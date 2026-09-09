@@ -49,14 +49,19 @@ Full annotated example: [`projects.example.toml`](projects.example.toml) — rat
 
 ```sh
 herdr plugin install CedarVerse/herdr-vergent
-mkdir -p "$(herdr plugin config-dir cedarverse.vergent)"
-cp projects.example.toml "$(herdr plugin config-dir cedarverse.vergent)/projects.toml"
-$EDITOR "$(herdr plugin config-dir cedarverse.vergent)/projects.toml"
 ```
 
-Then restart herdr (or run the seeder by hand: `bin/vergent.sh` from the plugin directory, `--dry-run` to preview). At boot the startup hook converges and exits; on live handoff it runs again — a no-op when state already matches.
+Then restart herdr. **That's the whole setup:** on first run, with no config present, vergent writes a starter file to its config dir and opens a small `vergent-start-here` Space whose pane prints the config's **absolute path**, how to edit it, and the starter contents. Replace that file with your own workspaces ( [`projects.example.toml`](projects.example.toml) is the full annotated reference), restart, and close the welcome Space — it never comes back once the file is yours.
 
-Override the file location with `--toml <path>` or `HERDR_VERGENT_TOML`.
+The starter is written **only when the config is absent**, and never overwritten. Prefer to set it up by hand? The config lives at:
+
+```sh
+"$(herdr plugin config-dir cedarverse.vergent)/projects.toml"
+```
+
+Run the seeder by hand with `bin/vergent.sh` from the plugin directory (`--dry-run` to preview — it plans through a shadow overlay and executes nothing). At boot the startup hook converges and exits; on live handoff it runs again — a no-op when state already matches.
+
+Override the file location with `--toml <path>` or `HERDR_VERGENT_TOML` (explicit paths are strict: a missing one is an error, never auto-created).
 
 ## The contract
 

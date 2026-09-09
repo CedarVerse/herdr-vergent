@@ -6,6 +6,8 @@ set -euo pipefail
 
 DRY_RUN=0
 TOML_FILE="${HERDR_VERGENT_TOML:-}"
+TOML_EXPLICIT=0
+[ -n "$TOML_FILE" ] && TOML_EXPLICIT=1
 
 # Parse args BEFORE canonicalizing paths: readlink -f fails under set -e when
 # a path's parent directory is missing, so canonicalizing $HERDR_VERGENT_TOML
@@ -14,7 +16,7 @@ TOML_FILE="${HERDR_VERGENT_TOML:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
-    --toml) shift; [ $# -gt 0 ] || { echo "usage: vergent.sh [--dry-run] [--toml <path>]" >&2; exit 2; }; TOML_FILE="$1" ;;
+    --toml) shift; [ $# -gt 0 ] || { echo "usage: vergent.sh [--dry-run] [--toml <path>]" >&2; exit 2; }; TOML_FILE="$1"; TOML_EXPLICIT=1 ;;
     *) echo "usage: vergent.sh [--dry-run] [--toml <path>]" >&2; exit 2 ;;
   esac
   shift
@@ -26,6 +28,30 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 # replaces it, so user data must never live there). Outside herdr, fall
 # back to XDG-ish ~/.config/vergent. --toml and HERDR_VERGENT_TOML win.
 : "${TOML_FILE:=${HERDR_PLUGIN_CONFIG_DIR:-$HOME/.config/vergent}/projects.toml}"
+
+# First run: no config yet -> write the starter (NEVER overwrite), so a
+# fresh install does not fail invisibly in the plugin log. The starter
+# declares a "vergent-start-here" Space whose pane command prints the
+# absolute config path -- delivered by the SAME one-shot machinery that
+# runs user commands, i.e. exactly once per pane lifetime. Once the user
+# replaces the file's contents, that Space is no longer declared: the
+# superset rule leaves it until they close it, and it never returns.
+# DEFAULT-path only: an explicit --toml/HERDR_VERGENT_TOML that does not
+# exist is a deliberate reference -- a typo must fail loudly (readlink's
+# exit 2 below), not materialize a starter at the wrong location.
+if [ "$TOML_EXPLICIT" = 0 ] && [ ! -e "$TOML_FILE" ]; then
+  mkdir -p "$(dirname "$TOML_FILE")"
+  STARTER="$SCRIPT_DIR/../projects.starter.toml"
+  # Bash-native substitution (no sed delimiter traps with odd paths):
+  # the template carries __VERGENT_CONFIG_PATH__; the copy gets the
+  # RESOLVED absolute path so the welcome pane can name it exactly.
+  starter="$(<"$STARTER")" \
+    || { echo "vergent: cannot read starter template $STARTER" >&2; exit 2; }
+  printf '%s\n' "${starter//__VERGENT_CONFIG_PATH__/$TOML_FILE}" > "$TOML_FILE" \
+    || { echo "vergent: cannot write starter config to $TOML_FILE" >&2; exit 2; }
+  echo "vergent: starter config written to $TOML_FILE (edit it; this run opens a welcome Space)"
+fi
+
 # readlink -f fails (exit 1, no output) when the path's PARENT directory does
 # not exist -- e.g. `--toml ~/newproj/projects.toml` before the first checkout.
 # Bash gotcha pinned here: on a failed command-substitution assignment the
