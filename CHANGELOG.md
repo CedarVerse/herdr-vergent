@@ -6,6 +6,7 @@ All notable changes to vergent are documented here. Format based on Keep a Chang
 
 ### Added
 
+- `VERSION` file (0.2.0.0) as the ship version source, paired with `herdr-plugin.toml`'s `version` — release commits bump both.
 - First-run onboarding: when the default config file is absent, the hook writes a starter config (creating parent dirs; never overwriting) that declares a `vergent-start-here` Space whose pane prints the config's absolute path, how to edit it, and the starter contents — delivered through the same one-shot command machinery as user commands, so it fires exactly once per pane lifetime. Once the user replaces the file's contents, the Space is no longer declared: the superset rule leaves it until they close it, and it never returns.
 - The starter is written for the default config path only. Explicit `--toml` / `HERDR_VERGENT_TOML` targets stay strict — a missing explicit path is an error (a typo must fail loudly, not materialize a file at the wrong place).
 
