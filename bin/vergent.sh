@@ -21,7 +21,11 @@ while [ $# -gt 0 ]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-: "${TOML_FILE:=$SCRIPT_DIR/../.config/herdr/plugins-local/vergent/projects.toml}"
+# Default data file lives in the PLUGIN CONFIG DIR (herdr injects it at
+# runtime; the plugin root is a managed source checkout -- reinstalling
+# replaces it, so user data must never live there). Outside herdr, fall
+# back to XDG-ish ~/.config/vergent. --toml and HERDR_VERGENT_TOML win.
+: "${TOML_FILE:=${HERDR_PLUGIN_CONFIG_DIR:-$HOME/.config/vergent}/projects.toml}"
 # readlink -f fails (exit 1, no output) when the path's PARENT directory does
 # not exist -- e.g. `--toml ~/newproj/projects.toml` before the first checkout.
 # Bash gotcha pinned here: on a failed command-substitution assignment the
