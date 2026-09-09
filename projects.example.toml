@@ -1,0 +1,75 @@
+# vergent's declarative session file (schema v3).
+#
+# Copy this to your plugin config dir and edit:
+#   mkdir -p "$(herdr plugin config-dir elifarley.vergent)"
+#   cp projects.example.toml "$(herdr plugin config-dir elifarley.vergent)/projects.toml"
+#
+# Model (containment nests, all the way down):
+#   [[workspace]]          = a herdr Space  (matched by name; created if missing)
+#   [[workspace.tab]]      = a tab of that Space (matched by name; created with
+#                            its pane tree via layout.apply)
+#   [[workspace.tab.pane]] = a pane of that tab (matched by name; missing ones
+#                            are added; extra live panes are never touched)
+#
+# `name` is herdr's "label": the Space/tab/pane name shown in the UI and
+# matched on. Required at every level; unique within its scope (workspace:
+# global, tab: per workspace, pane: per tab).
+#
+# Paths: ~ expands; relative paths resolve against the parent level
+# (workspace -> tab -> pane). Every resolved path must exist, or the whole
+# tab is skipped with a visible reason (exit 1) -- never a half-typed tab.
+#
+# The contract: re-run any time (it is a verified no-op when live state
+# already matches); vergent NEVER deletes anything it does not declare;
+# matched panes are never mutated; per-pane agents/commands fire exactly
+# once per pane lifetime.
+#
+# Preview without touching the server:
+#   bin/vergent.sh --dry-run
+
+[[workspace]]
+name = "Dev"
+path = "~/src"
+
+# One tab, three sibling panes: the tab omits its path and inherits the
+# workspace's ~/src, so every pane declares just its delta (the root pane's
+# optional cwd makes the list uniform -- no ../ and no per-tab paths).
+[[workspace.tab]]
+name = "Dev"
+
+[[workspace.tab.pane]]
+name = "editor"
+cwd = "my-project"
+
+[[workspace.tab.pane]]
+name = "logs"
+cwd = "my-project/var"
+direction = "down"
+
+[[workspace.tab.pane]]
+name = "agent"
+cwd = "my-project"
+direction = "right"
+agent = "claude"            # optional: started via herdr, exactly once
+
+# A second Space whose tabs live in one repo: the Space carries the repo,
+# the tab inherits it.
+[[workspace]]
+name = "Writing"
+path = "~/notes"
+
+[[workspace.tab]]
+name = "Drafts"
+
+[[workspace.tab.pane]]
+name = "shell"
+command = "nvim"            # optional: typed into the pane's shell once
+
+# Escapes from inheritance: no shared base -> absolute tab paths, and a
+# pane-less tab is legal (an empty tab over a real directory).
+[[workspace]]
+name = "Ops"
+
+[[workspace.tab]]
+name = "logs"
+path = "/var/log"

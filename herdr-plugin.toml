@@ -1,0 +1,21 @@
+# Registers vergent as a herdr plugin: at server start (and live handoff),
+# the [[startup]] hook converges the running session to projects.toml --
+# the supported equivalent of kitty's startup_session / zellij's layout
+# files, with reconcile semantics instead of one-shot creation.
+#
+# Runtime commands run with the plugin directory as cwd; herdr injects
+# HERDR_PLUGIN_CONFIG_DIR (where your projects.toml lives), HERDR_PLUGIN_
+# STATE_DIR, and HERDR_SOCKET_PATH. See the README for the full contract.
+#
+# Install:  herdr plugin install elifarley/herdr-vergent
+# Verify:   herdr plugin list
+
+id = "elifarley.vergent"
+name = "Vergent"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Convergent sessions: declare workspaces, tabs, and panes in projects.toml; converge at every boot. Idempotent, deletion-free."
+platforms = ["linux"]
+
+[[startup]]
+command = ["/bin/bash", "bin/vergent.sh"]
