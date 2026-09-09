@@ -25,6 +25,7 @@ Scenarios 10-12 are branch pins beyond the required nine: the split->rename
 recovery window, the loader's skip_reason passthrough, and the matched-pane
 agent-degradation check (the spec's convergence-oracle clause).
 """
+
 import os
 import sys
 import unittest
@@ -36,8 +37,14 @@ import harness
 
 def pane(name, direction=None, ratio=None, cwd="/tmp", agent=None, command=None):
     """One loader-model pane entry (same shape _load_pane returns)."""
-    return {"name": name, "cwd": cwd, "direction": direction,
-            "ratio": ratio, "agent": agent, "command": command}
+    return {
+        "name": name,
+        "cwd": cwd,
+        "direction": direction,
+        "ratio": ratio,
+        "agent": agent,
+        "command": command,
+    }
 
 
 def tab(label="T", path="/tmp", panes=(), skip_reason=None):
@@ -50,8 +57,7 @@ def tab(label="T", path="/tmp", panes=(), skip_reason=None):
 
 def model(tabs, ws_label="W", ws_path="/tmp"):
     """A whole loader-model: one workspace holding `tabs`."""
-    return {"workspaces": [{"label": ws_label, "path": ws_path,
-                            "tabs": list(tabs)}]}
+    return {"workspaces": [{"label": ws_label, "path": ws_path, "tabs": list(tabs)}]}
 
 
 class AutoAgent(fake_herdr.FakeHerdr):
@@ -105,7 +111,7 @@ class ReconcileCase(unittest.TestCase):
         return counters, lines
 
     def calls_after(self):
-        return [meth for meth, _ in self.fake.calls[self.mark:]]
+        return [meth for meth, _ in self.fake.calls[self.mark :]]
 
     def seed_preexisting(self, tab_label="T", root_label=None, orphan_cwd=None):
         """Workspace 'W' with one pre-existing tab `tab_label`.
@@ -117,20 +123,26 @@ class ReconcileCase(unittest.TestCase):
         """
         r = self.client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         ws_id, root_tab = r["workspace"]["workspace_id"], r["tab"]["tab_id"]
-        t = self.client.call("tab.create", {"workspace_id": ws_id,
-                                            "label": tab_label, "cwd": "/tmp"})
+        t = self.client.call(
+            "tab.create", {"workspace_id": ws_id, "label": tab_label, "cwd": "/tmp"}
+        )
         tab_id, pane_id = t["tab"]["tab_id"], t["root_pane"]["pane_id"]
         if root_label is not None:
-            self.client.call("pane.rename", {"pane_id": pane_id,
-                                             "label": root_label})
+            self.client.call("pane.rename", {"pane_id": pane_id, "label": root_label})
         orphan = None
         if orphan_cwd is not None:
-            s = self.client.call("pane.split", {"target_pane_id": pane_id,
-                                                "direction": "right",
-                                                "cwd": orphan_cwd})
+            s = self.client.call(
+                "pane.split",
+                {"target_pane_id": pane_id, "direction": "right", "cwd": orphan_cwd},
+            )
             orphan = s["pane"]["pane_id"]
-        return {"ws_id": ws_id, "root_tab": root_tab, "tab_id": tab_id,
-                "root_pane": pane_id, "orphan": orphan}
+        return {
+            "ws_id": ws_id,
+            "root_tab": root_tab,
+            "tab_id": tab_id,
+            "root_pane": pane_id,
+            "orphan": orphan,
+        }
 
     def only_ws_id(self):
         return self.client.call("workspace.list")["workspaces"][0]["workspace_id"]
@@ -145,13 +157,17 @@ class ReconcileCase(unittest.TestCase):
         return self.fake.panes[wire_pane["pane_id"]].get("typed", [])
 
     def tab_labels(self, ws_id):
-        return [t["label"] for t in
-                self.client.call("tab.list", {"workspace_id": ws_id})["tabs"]]
+        return [
+            t["label"]
+            for t in self.client.call("tab.list", {"workspace_id": ws_id})["tabs"]
+        ]
 
     def tab_id_of(self, ws_id, label):
-        return next(t["tab_id"] for t in
-                    self.client.call("tab.list", {"workspace_id": ws_id})["tabs"]
-                    if t["label"] == label)
+        return next(
+            t["tab_id"]
+            for t in self.client.call("tab.list", {"workspace_id": ws_id})["tabs"]
+            if t["label"] == label
+        )
 
     # --- scenario 1 -----------------------------------------------------------
 
@@ -161,13 +177,18 @@ class ReconcileCase(unittest.TestCase):
         """
         ids = self.seed_preexisting(root_label="shell")
         counters, _ = self.run_reconcile(model([tab("T", "/tmp", [pane("shell")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 1,
-                                    "skipped": 0, "failed": 0})
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 1, "skipped": 0, "failed": 0},
+        )
         # snapshot (workspace.list + per-ws tab.list/pane.list) + panes_of
-        self.assertEqual(self.calls_after(),
-                         ["workspace.list", "tab.list", "pane.list", "pane.list"])
-        self.assertEqual(self.panes_by_label(ids["ws_id"], ids["tab_id"])
-                         ["shell"]["pane_id"], ids["root_pane"])
+        self.assertEqual(
+            self.calls_after(), ["workspace.list", "tab.list", "pane.list", "pane.list"]
+        )
+        self.assertEqual(
+            self.panes_by_label(ids["ws_id"], ids["tab_id"])["shell"]["pane_id"],
+            ids["root_pane"],
+        )
 
     # --- scenario 2 -----------------------------------------------------------
 
@@ -176,17 +197,27 @@ class ReconcileCase(unittest.TestCase):
         tab_id replacement ONTO the implicit root tab (no second tab, no
         leftover "1"), then one-shots fire per declared pane.
         """
-        counters, _ = self.run_reconcile(model([tab("T", "/tmp",
-                                          [pane("a", agent="claude"),
-                                           pane("b", "right", command="htop")])]))
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        counters, _ = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [pane("a", agent="claude"), pane("b", "right", command="htop")],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
         methods = self.calls_after()
         self.assertEqual(methods[0], "workspace.list")  # empty-server snapshot
-        self.assertEqual(methods[1:4],
-                         ["workspace.create", "layout.apply", "tab.list"])
-        apply_params = next(p for m, p in self.fake.calls[self.mark:]
-                            if m == "layout.apply")
+        self.assertEqual(methods[1:4], ["workspace.create", "layout.apply", "tab.list"])
+        apply_params = next(
+            p for m, p in self.fake.calls[self.mark :] if m == "layout.apply"
+        )
         # tab_id form: bound to the implicit root, labeled for re-resolution
         self.assertEqual(sorted(apply_params), ["root", "tab_id", "tab_label"])
         self.assertEqual(apply_params["tab_label"], "T")
@@ -204,8 +235,10 @@ class ReconcileCase(unittest.TestCase):
         leftover, no warning.
         """
         counters, lines = self.run_reconcile(model([tab("T", "/tmp", [])]))
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
         methods = self.calls_after()
         self.assertEqual(methods[1:4], ["workspace.create", "pane.list", "tab.rename"])
         self.assertNotIn("tab.create", methods)
@@ -221,16 +254,21 @@ class ReconcileCase(unittest.TestCase):
         declared path; the leftover root is warned, never silent.
         """
         counters, lines = self.run_reconcile(model([tab("T", "/opt/elsewhere", [])]))
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
         methods = self.calls_after()
         self.assertEqual(methods[1:4], ["workspace.create", "pane.list", "tab.create"])
         self.assertNotIn("tab.rename", methods)
         ws_id = self.only_ws_id()
         self.assertEqual(sorted(self.tab_labels(ws_id)), ["1", "T"])
         # the fresh tab was created at the DECLARED path, not the ws cwd
-        created = next(t for t in self.client.call(
-            "tab.list", {"workspace_id": ws_id})["tabs"] if t["label"] == "T")
+        created = next(
+            t
+            for t in self.client.call("tab.list", {"workspace_id": ws_id})["tabs"]
+            if t["label"] == "T"
+        )
         self.assertEqual(self.fake.tabs[created["tab_id"]]["cwd"], "/opt/elsewhere")
         self.assertIn("implicit '1' tab remains", "\n".join(lines))
 
@@ -242,12 +280,24 @@ class ReconcileCase(unittest.TestCase):
         never on a matched pane (scenario 1's untouched contract).
         """
         ids = self.seed_preexisting()  # single unnamed root pane
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell", command="echo hi"),
-                                               pane("logs", "right",
-                                                    command="htop")])]))
-        self.assertEqual(counters, {"created": 1, "adopted": 1, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [
+                            pane("shell", command="echo hi"),
+                            pane("logs", "right", command="htop"),
+                        ],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 1, "adopted": 1, "matched": 0, "skipped": 0, "failed": 0},
+        )
         self.assertIn("adopted root pane -> 'shell'", "\n".join(lines))
         panes = self.panes_by_label(ids["ws_id"], ids["tab_id"])
         self.assertEqual(sorted(panes), ["logs", "shell"])
@@ -265,12 +315,21 @@ class ReconcileCase(unittest.TestCase):
         adopted by rename -- no pane.split, no pane growth.
         """
         ids = self.seed_preexisting(root_label="shell", orphan_cwd="/tmp/data")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell"),
-                                               pane("logs", "right",
-                                                    cwd="/tmp/data")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 1, "matched": 1,
-                                    "skipped": 0, "failed": 0})
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [pane("shell"), pane("logs", "right", cwd="/tmp/data")],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 1, "matched": 1, "skipped": 0, "failed": 0},
+        )
         self.assertNotIn("pane.split", self.calls_after())
         self.assertIn("adopts unnamed orphan", "\n".join(lines))
         panes = self.panes_by_label(ids["ws_id"], ids["tab_id"])
@@ -285,12 +344,25 @@ class ReconcileCase(unittest.TestCase):
         """
         ids = self.seed_preexisting(root_label="shell")
         self.fake.fail_next("pane.split")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell"),
-                                               pane("logs", "right", cwd="/x"),
-                                               pane("spare", "down", cwd="/y")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 1,
-                                    "skipped": 1, "failed": 1})
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [
+                            pane("shell"),
+                            pane("logs", "right", cwd="/x"),
+                            pane("spare", "down", cwd="/y"),
+                        ],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 1, "skipped": 1, "failed": 1},
+        )
         # exactly ONE split attempt: the dependent did not re-anchor onto
         # pane #1 and try again
         self.assertEqual(self.calls_after().count("pane.split"), 1)
@@ -312,11 +384,13 @@ class ReconcileCase(unittest.TestCase):
         ids = self.seed_preexisting()  # single unnamed root pane
         self.fake.panes[ids["root_pane"]]["foreground_cwd"] = "/elsewhere"
         counters, lines = self.run_reconcile(model([tab("T", "/tmp", [pane("shell")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 0,
-                                    "skipped": 1, "failed": 0})
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 0, "skipped": 1, "failed": 0},
+        )
         text = "\n".join(lines)
-        self.assertIn("/elsewhere", text)   # observed
-        self.assertIn("/tmp", text)         # declared
+        self.assertIn("/elsewhere", text)  # observed
+        self.assertIn("/tmp", text)  # declared
         # refusal, not damage: no rename, pane stays unnamed
         self.assertNotIn("pane.rename", self.calls_after())
         panes = self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
@@ -331,16 +405,19 @@ class ReconcileCase(unittest.TestCase):
         unsupported).
         """
         self.seed_preexisting(root_label="x", orphan_cwd="/tmp")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell"),
-                                               pane("logs", "right")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 0,
-                                    "skipped": 1, "failed": 0})
+        counters, lines = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("shell"), pane("logs", "right")])])
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 0, "skipped": 1, "failed": 0},
+        )
         text = "\n".join(lines)
         self.assertIn("no live pane matches pane #1 'shell'", text)
         self.assertIn("2 live panes", text)
-        self.assertEqual(self.calls_after(),
-                         ["workspace.list", "tab.list", "pane.list", "pane.list"])
+        self.assertEqual(
+            self.calls_after(), ["workspace.list", "tab.list", "pane.list", "pane.list"]
+        )
 
     # --- scenario 8 -----------------------------------------------------------
 
@@ -349,13 +426,18 @@ class ReconcileCase(unittest.TestCase):
         agent.start is NOT called, a note is logged, nothing counted failed.
         """
         self.env(AutoAgent())
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("a", agent="claude")])]))
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        counters, lines = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("a", agent="claude")])])
+        )
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
         self.assertNotIn("agent.start", self.calls_after())
-        self.assertIn("  ~ tab 'T': pane 'a': agent 'claude' already present, "
-                      "skipping start", "\n".join(lines))
+        self.assertIn(
+            "  ~ tab 'T': pane 'a': agent 'claude' already present, skipping start",
+            "\n".join(lines),
+        )
 
     # --- scenario 9 -----------------------------------------------------------
 
@@ -365,14 +447,25 @@ class ReconcileCase(unittest.TestCase):
         The command one-shot rides the same run: typed ends [text, "Enter"].
         """
         self.env(StartedButFailed())
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("a", agent="claude"),
-                                               pane("b", "right",
-                                                    command="htop")])]))
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
-        self.assertIn("  ~ tab 'T': pane 'a': started (confirmed after "
-                      "timeout/error)", "\n".join(lines))
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [pane("a", agent="claude"), pane("b", "right", command="htop")],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
+        self.assertIn(
+            "  ~ tab 'T': pane 'a': started (confirmed after timeout/error)",
+            "\n".join(lines),
+        )
         ws_id = self.only_ws_id()
         tab_id = self.tab_id_of(ws_id, "T")
         panes = self.panes_by_label(ws_id, tab_id)
@@ -389,22 +482,24 @@ class ReconcileCase(unittest.TestCase):
         """
         ids = self.seed_preexisting(root_label="shell")
         self.fake.fail_next("pane.rename")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell"),
-                                               pane("logs", "right",
-                                                    cwd="/x")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 1,
-                                    "skipped": 0, "failed": 1})
+        counters, lines = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("shell"), pane("logs", "right", cwd="/x")])])
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 1, "skipped": 0, "failed": 1},
+        )
         self.assertIn("rename failed", "\n".join(lines))
         panes = self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
         self.assertEqual([p["label"] for p in panes], ["shell", None])
         # next run: the leftover orphan is reclaimed, not re-split
-        counters2, _ = self.run_reconcile(model([tab("T", "/tmp",
-                                           [pane("shell"),
-                                            pane("logs", "right",
-                                                 cwd="/x")])]))
-        self.assertEqual(counters2, {"created": 0, "adopted": 1, "matched": 1,
-                                     "skipped": 0, "failed": 0})
+        counters2, _ = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("shell"), pane("logs", "right", cwd="/x")])])
+        )
+        self.assertEqual(
+            counters2,
+            {"created": 0, "adopted": 1, "matched": 1, "skipped": 0, "failed": 0},
+        )
         self.assertNotIn("pane.split", self.calls_after())
         panes = self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
         self.assertEqual([p["label"] for p in panes], ["shell", "logs"])
@@ -413,13 +508,23 @@ class ReconcileCase(unittest.TestCase):
         """A tab the loader marked skip_reason is reported and counted with
         zero socket work -- before any tab matching, let alone mutation.
         """
-        counters, lines = self.run_reconcile(model([tab("Bad", "/nope", [pane("a")],
-                                              skip_reason="resolved path does "
-                                                        "not exist: /nope")]))
-        self.assertEqual(counters, {"created": 1, "adopted": 0, "matched": 0,
-                                    "skipped": 1, "failed": 0})
-        self.assertIn("skipped (resolved path does not exist: /nope)",
-                      "\n".join(lines))
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "Bad",
+                        "/nope",
+                        [pane("a")],
+                        skip_reason="resolved path does not exist: /nope",
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 1, "adopted": 0, "matched": 0, "skipped": 1, "failed": 0},
+        )
+        self.assertIn("skipped (resolved path does not exist: /nope)", "\n".join(lines))
         # workspace.create happened (the workspace itself is fine); nothing
         # else did -- no tab.create/layout.apply for the skipped tab
         self.assertEqual(self.calls_after(), ["workspace.list", "workspace.create"])
@@ -431,13 +536,18 @@ class ReconcileCase(unittest.TestCase):
         mutated).
         """
         ids = self.seed_preexisting(root_label="shell")
-        self.client.call("agent.start", {"pane_id": ids["root_pane"],
-                                         "kind": "codex", "name": "shell"})
+        self.client.call(
+            "agent.start",
+            {"pane_id": ids["root_pane"], "kind": "codex", "name": "shell"},
+        )
         self.mark = len(self.fake.calls)
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell", agent="claude")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 1,
-                                    "skipped": 0, "failed": 1})
+        counters, lines = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("shell", agent="claude")])])
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 1, "skipped": 0, "failed": 1},
+        )
         text = "\n".join(lines)
         self.assertIn("declared agent 'claude'", text)
         self.assertIn("'codex'", text)
@@ -454,14 +564,18 @@ class ReconcileCase(unittest.TestCase):
         ids = self.seed_preexisting()  # single unnamed root pane
         self.fake.fail_next("pane.rename")
         counters, lines = self.run_reconcile(model([tab("T", "/tmp", [pane("shell")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 1})
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 0, "skipped": 0, "failed": 1},
+        )
         self.assertIn("adoption rename failed", "\n".join(lines))
         panes = self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
         self.assertIsNone(panes[0]["label"])
         counters2, _ = self.run_reconcile(model([tab("T", "/tmp", [pane("shell")])]))
-        self.assertEqual(counters2, {"created": 0, "adopted": 1, "matched": 0,
-                                     "skipped": 0, "failed": 0})
+        self.assertEqual(
+            counters2,
+            {"created": 0, "adopted": 1, "matched": 0, "skipped": 0, "failed": 0},
+        )
 
     def test_command_one_shot_failure_is_contained(self):
         """A failing command one-shot is logged and counted, LATER one-shots
@@ -474,12 +588,24 @@ class ReconcileCase(unittest.TestCase):
         """
         ids = self.seed_preexisting()
         self.fake.fail_next("pane.send_text")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell", command="echo hi"),
-                                               pane("logs", "right",
-                                                    command="htop")])]))
-        self.assertEqual(counters, {"created": 1, "adopted": 1, "matched": 0,
-                                    "skipped": 0, "failed": 1})
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [
+                            pane("shell", command="echo hi"),
+                            pane("logs", "right", command="htop"),
+                        ],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 1, "adopted": 1, "matched": 0, "skipped": 0, "failed": 1},
+        )
         text = "\n".join(lines)
         self.assertIn("pane 'shell': command failed", text)
         self.assertIn("pane 'logs': command sent", text)
@@ -487,15 +613,24 @@ class ReconcileCase(unittest.TestCase):
         self.assertEqual(self.typed_of(panes["logs"]), ["htop", "Enter"])
         self.assertEqual(self.typed_of(panes["shell"]), [])
         send_calls = [(m, p) for m, p in self.fake.calls if "send" in m]
-        self.assertIn(("pane.send_text",
-                       {"pane_id": panes["logs"]["pane_id"], "text": "htop"}),
-                      send_calls)
-        self.assertIn(("pane.send_keys",
-                       {"pane_id": panes["logs"]["pane_id"], "keys": ["Enter"]}),
-                      send_calls)
-        self.assertNotIn(("pane.send_keys",
-                          {"pane_id": panes["shell"]["pane_id"],
-                           "keys": ["Enter"]}), send_calls)
+        self.assertIn(
+            ("pane.send_text", {"pane_id": panes["logs"]["pane_id"], "text": "htop"}),
+            send_calls,
+        )
+        self.assertIn(
+            (
+                "pane.send_keys",
+                {"pane_id": panes["logs"]["pane_id"], "keys": ["Enter"]},
+            ),
+            send_calls,
+        )
+        self.assertNotIn(
+            (
+                "pane.send_keys",
+                {"pane_id": panes["shell"]["pane_id"], "keys": ["Enter"]},
+            ),
+            send_calls,
+        )
 
     # --- coverage-audit pins: untested error handlers + edge guards ----------
 
@@ -504,12 +639,15 @@ class ReconcileCase(unittest.TestCase):
         real refusal, NOT the timeout shape of scenario 9): counted failed,
         the message names the pane, and the run goes on."""
         self.fake.fail_next("agent.start")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("a", agent="claude")])]))
+        counters, lines = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("a", agent="claude")])])
+        )
         # fresh flow: workspace + applied tab count as created=2; the pane
         # came into being with the tree, so there was nothing to adopt
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 1})
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 1},
+        )
         self.assertIn("pane 'a': agent.start failed", "\n".join(lines))
 
     def test_orphan_adoption_rename_failure_is_contained(self):
@@ -519,33 +657,55 @@ class ReconcileCase(unittest.TestCase):
         root-adoption flavor."""
         ids = self.seed_preexisting(root_label="shell", orphan_cwd="/tmp/data")
         self.fake.fail_next("pane.rename")
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell"),
-                                               pane("logs", "right",
-                                                    cwd="/tmp/data")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 1,
-                                    "skipped": 0, "failed": 1})
+        counters, lines = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [pane("shell"), pane("logs", "right", cwd="/tmp/data")],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 1, "skipped": 0, "failed": 1},
+        )
         self.assertIn("pane 'logs' adoption rename failed", "\n".join(lines))
-        orphan_wire = next(p for p in
-                           self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
-                           if p["pane_id"] == ids["orphan"])
+        orphan_wire = next(
+            p
+            for p in self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
+            if p["pane_id"] == ids["orphan"]
+        )
         self.assertIsNone(orphan_wire["label"])
         # next run: the orphan is reclaimed, not re-split
-        counters2, _ = self.run_reconcile(model([tab("T", "/tmp",
-                                           [pane("shell"),
-                                            pane("logs", "right",
-                                                 cwd="/tmp/data")])]))
-        self.assertEqual(counters2, {"created": 0, "adopted": 1, "matched": 1,
-                                     "skipped": 0, "failed": 0})
+        counters2, _ = self.run_reconcile(
+            model(
+                [
+                    tab(
+                        "T",
+                        "/tmp",
+                        [pane("shell"), pane("logs", "right", cwd="/tmp/data")],
+                    )
+                ]
+            )
+        )
+        self.assertEqual(
+            counters2,
+            {"created": 0, "adopted": 1, "matched": 1, "skipped": 0, "failed": 0},
+        )
         self.assertNotIn("pane.split", self.calls_after())
 
     def test_index_panes_duplicate_names_keep_first(self):
         """Duplicate live pane names: warn once naming the label, index the
         FIRST occurrence (position order); unnamed panes never enter the
         index. Pure-function pin -- no socket involved."""
-        live = [{"pane_id": "p1", "label": "dup"},
-                {"pane_id": "p2", "label": "dup"},
-                {"pane_id": "p3", "label": None}]
+        live = [
+            {"pane_id": "p1", "label": "dup"},
+            {"pane_id": "p2", "label": "dup"},
+            {"pane_id": "p3", "label": None},
+        ]
         lines = []
         by = self.m.index_panes(live, lines.append, "T")
         self.assertEqual(set(by), {"dup"})
@@ -561,10 +721,11 @@ class ReconcileCase(unittest.TestCase):
         foreground report is missing."""
         ids = self.seed_preexisting()
         self.fake.panes[ids["root_pane"]]["foreground_cwd"] = None
-        counters, _ = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 1, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        counters, _ = self.run_reconcile(model([tab("T", "/tmp", [pane("shell")])]))
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 1, "matched": 0, "skipped": 0, "failed": 0},
+        )
         panes = self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
         self.assertEqual([p["label"] for p in panes], ["shell"])
 
@@ -576,11 +737,13 @@ class ReconcileCase(unittest.TestCase):
         send_text/send_keys in the call window, typed buffer untouched.
         Re-runs must stay idempotent, not re-execute the user's commands."""
         ids = self.seed_preexisting(root_label="shell")
-        counters, _ = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell",
-                                                    command="make all")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 1,
-                                    "skipped": 0, "failed": 0})
+        counters, _ = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("shell", command="make all")])])
+        )
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 1, "skipped": 0, "failed": 0},
+        )
         methods = self.calls_after()
         self.assertNotIn("pane.send_text", methods)
         self.assertNotIn("pane.send_keys", methods)
@@ -593,19 +756,31 @@ class ReconcileCase(unittest.TestCase):
         per-workspace by construction; this pins that the whole walk --
         match, create, one-shots -- never lets a tab label leak across the
         workspace boundary."""
-        mdl = {"workspaces": [
-            {"label": "W1", "path": "/tmp",
-             "tabs": [tab("T", "/tmp", [pane("w1only")])]},
-            {"label": "W2", "path": "/tmp",
-             "tabs": [tab("T", "/tmp", [pane("w2only")])]},
-        ]}
+        mdl = {
+            "workspaces": [
+                {
+                    "label": "W1",
+                    "path": "/tmp",
+                    "tabs": [tab("T", "/tmp", [pane("w1only")])],
+                },
+                {
+                    "label": "W2",
+                    "path": "/tmp",
+                    "tabs": [tab("T", "/tmp", [pane("w2only")])],
+                },
+            ]
+        }
         counters, _ = self.run_reconcile(mdl)
-        self.assertEqual(counters, {"created": 4, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        self.assertEqual(
+            counters,
+            {"created": 4, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
         for ws_label, pane_name in (("W1", "w1only"), ("W2", "w2only")):
-            ws_id = next(w["workspace_id"] for w in
-                         self.client.call("workspace.list")["workspaces"]
-                         if w["label"] == ws_label)
+            ws_id = next(
+                w["workspace_id"]
+                for w in self.client.call("workspace.list")["workspaces"]
+                if w["label"] == ws_label
+            )
             self.assertEqual(self.tab_labels(ws_id), ["T"])  # one tab, exactly
             panes = self.panes_by_label(ws_id, self.tab_id_of(ws_id, "T"))
             self.assertEqual(sorted(panes), [pane_name])  # the OWN declaration
@@ -617,10 +792,11 @@ class ReconcileCase(unittest.TestCase):
         user's agent pane keeps its identity for the next run)."""
         ids = self.seed_preexisting()  # single unnamed root pane
         self.fake.panes[ids["root_pane"]]["agent"] = "claude"
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("shell")])]))
-        self.assertEqual(counters, {"created": 0, "adopted": 0, "matched": 0,
-                                    "skipped": 1, "failed": 0})
+        counters, lines = self.run_reconcile(model([tab("T", "/tmp", [pane("shell")])]))
+        self.assertEqual(
+            counters,
+            {"created": 0, "adopted": 0, "matched": 0, "skipped": 1, "failed": 0},
+        )
         self.assertIn("'claude'", "\n".join(lines))
         self.assertNotIn("pane.rename", self.calls_after())
         wire = self.m.panes_of(self.client, ids["ws_id"], ids["tab_id"])
@@ -632,6 +808,7 @@ class ReconcileCase(unittest.TestCase):
         silently behind a clean exit: the log names the pane and failed=1
         keeps the run's exit code honest. Fake subclass strips one pane's
         label right where layout.apply lands it."""
+
         class LabelDropper(fake_herdr.FakeHerdr):
             def m_layout_apply(self, p):
                 r = super().m_layout_apply(p)
@@ -641,12 +818,12 @@ class ReconcileCase(unittest.TestCase):
                 return r
 
         self.env(fake=LabelDropper())
-        counters, lines = self.run_reconcile(model([tab("T", "/tmp",
-                                              [pane("a"),
-                                               pane("b", "right",
-                                                    command="htop")])]))
-        self.assertIn("pane 'b': not found in fresh tab -- one-shot skipped",
-                      "\n".join(lines))
+        counters, lines = self.run_reconcile(
+            model([tab("T", "/tmp", [pane("a"), pane("b", "right", command="htop")])])
+        )
+        self.assertIn(
+            "pane 'b': not found in fresh tab -- one-shot skipped", "\n".join(lines)
+        )
         self.assertEqual(counters["failed"], 1)
 
 

@@ -5,6 +5,7 @@ probed 2026-09-08 on herdr 0.8.2 (replacement closes the old tab; apply
 without tab_id creates one; receipts in the design spec's Evidence
 appendix); tests/fake_herdr.py encodes those semantics.
 """
+
 import os
 import sys
 import unittest
@@ -17,8 +18,14 @@ from test_loader import load_module
 
 def pane(name, direction=None, ratio=None, cwd="/tmp"):
     """One loader-model pane entry (same shape _load_pane returns)."""
-    return {"name": name, "cwd": cwd, "direction": direction,
-            "ratio": ratio, "agent": None, "command": None}
+    return {
+        "name": name,
+        "cwd": cwd,
+        "direction": direction,
+        "ratio": ratio,
+        "agent": None,
+        "command": None,
+    }
 
 
 def tab(label="T", path="/tmp", panes=()):
@@ -36,8 +43,10 @@ class CreateCase(unittest.TestCase):
 
     def _tab_ids(self):
         """All tab ids of the fixture workspace, via the production path."""
-        return [t["tab_id"] for t in
-                self.client.call("tab.list", {"workspace_id": self.ws_id})["tabs"]]
+        return [
+            t["tab_id"]
+            for t in self.client.call("tab.list", {"workspace_id": self.ws_id})["tabs"]
+        ]
 
     # --- build_tree ---------------------------------------------------------
 
@@ -46,14 +55,25 @@ class CreateCase(unittest.TestCase):
         direction with its ratio: the outermost split comes from the LAST
         pane, declared order stays the first-to-last spine.
         """
-        tree = self.m.build_tree([pane("a"), pane("b", "down", 0.7),
-                                  pane("c", "right")])
-        self.assertEqual(tree, {
-            "type": "split", "direction": "right", "ratio": 0.5,
-            "first": {"type": "split", "direction": "down", "ratio": 0.7,
-                      "first": {"type": "pane", "label": "a", "cwd": "/tmp"},
-                      "second": {"type": "pane", "label": "b", "cwd": "/tmp"}},
-            "second": {"type": "pane", "label": "c", "cwd": "/tmp"}})
+        tree = self.m.build_tree(
+            [pane("a"), pane("b", "down", 0.7), pane("c", "right")]
+        )
+        self.assertEqual(
+            tree,
+            {
+                "type": "split",
+                "direction": "right",
+                "ratio": 0.5,
+                "first": {
+                    "type": "split",
+                    "direction": "down",
+                    "ratio": 0.7,
+                    "first": {"type": "pane", "label": "a", "cwd": "/tmp"},
+                    "second": {"type": "pane", "label": "b", "cwd": "/tmp"},
+                },
+                "second": {"type": "pane", "label": "c", "cwd": "/tmp"},
+            },
+        )
 
     def test_build_tree_defaults_omitted_ratio(self):
         """The loader stores ratio=None when the TOML omitted it; the server
@@ -71,12 +91,14 @@ class CreateCase(unittest.TestCase):
         """Inventory of ONE tab: full pane dicts in pane.list order, never
         name-keyed -- the reconciler's cardinality/order source.
         """
-        t = self.client.call("tab.create", {"workspace_id": self.ws_id,
-                                            "label": "T2", "cwd": "/tmp"})
+        t = self.client.call(
+            "tab.create", {"workspace_id": self.ws_id, "label": "T2", "cwd": "/tmp"}
+        )
         tab2, t2_root = t["tab"]["tab_id"], t["root_pane"]["pane_id"]
-        split = self.client.call("pane.split", {"target_pane_id": t2_root,
-                                                "direction": "right",
-                                                "cwd": "/tmp"})
+        split = self.client.call(
+            "pane.split",
+            {"target_pane_id": t2_root, "direction": "right", "cwd": "/tmp"},
+        )
         t2_split = split["pane"]["pane_id"]
         self.client.call("pane.rename", {"pane_id": t2_root, "label": "x"})
         self.client.call("pane.rename", {"pane_id": t2_split, "label": "y"})
@@ -98,10 +120,13 @@ class CreateCase(unittest.TestCase):
         and the tree, and the RETURNED id is the replacement's (the implicit
         id died with the apply).
         """
-        got, consumed = self.m.create_tab(self.client, self.ws_id,
-                                          tab(panes=[pane("a"),
-                                                     pane("b", "right", 0.6)]),
-                                          "fallback", implicit_root_tab_id=self.root_tab)
+        got, consumed = self.m.create_tab(
+            self.client,
+            self.ws_id,
+            tab(panes=[pane("a"), pane("b", "right", 0.6)]),
+            "fallback",
+            implicit_root_tab_id=self.root_tab,
+        )
         self.assertTrue(consumed)  # the apply disposed of the implicit tab
         self.assertNotIn(self.root_tab, self.fake.tabs)  # implicit tab disposed
         ids = self._tab_ids()
@@ -119,12 +144,18 @@ class CreateCase(unittest.TestCase):
         the rename (the Codex 2026-09-08 cwd check).
         """
         first = len(self.fake.calls)
-        got, consumed = self.m.create_tab(self.client, self.ws_id, tab(panes=[]),
-                                          "fallback", implicit_root_tab_id=self.root_tab)
+        got, consumed = self.m.create_tab(
+            self.client,
+            self.ws_id,
+            tab(panes=[]),
+            "fallback",
+            implicit_root_tab_id=self.root_tab,
+        )
         self.assertEqual(got, self.root_tab)  # same tab, no replacement
         self.assertTrue(consumed)
-        self.assertEqual([m for m, _ in self.fake.calls[first:]],
-                         ["pane.list", "tab.rename"])
+        self.assertEqual(
+            [m for m, _ in self.fake.calls[first:]], ["pane.list", "tab.rename"]
+        )
         self.assertEqual(self.fake.tabs[self.root_tab]["label"], "T")
 
     def test_paneless_implicit_cwd_mismatch_creates_fresh(self):
@@ -137,12 +168,17 @@ class CreateCase(unittest.TestCase):
         """
         first = len(self.fake.calls)
         got, consumed = self.m.create_tab(
-            self.client, self.ws_id, tab(path="/opt/elsewhere", panes=[]),
-            "fallback", implicit_root_tab_id=self.root_tab)
+            self.client,
+            self.ws_id,
+            tab(path="/opt/elsewhere", panes=[]),
+            "fallback",
+            implicit_root_tab_id=self.root_tab,
+        )
         self.assertNotEqual(got, self.root_tab)
         self.assertFalse(consumed)
-        self.assertEqual([m for m, _ in self.fake.calls[first:]],
-                         ["pane.list", "tab.create"])
+        self.assertEqual(
+            [m for m, _ in self.fake.calls[first:]], ["pane.list", "tab.create"]
+        )
         self.assertEqual(self.fake.tabs[got]["cwd"], "/opt/elsewhere")
         self.assertIn(self.root_tab, self.fake.tabs)  # root untouched
         self.assertEqual(self.fake.tabs[self.root_tab]["label"], "1")
@@ -152,9 +188,12 @@ class CreateCase(unittest.TestCase):
         tab_label and NO tab_id creates the tab.
         """
         first = len(self.fake.calls)
-        got, consumed = self.m.create_tab(self.client, self.ws_id,
-                                          tab(panes=[pane("a"), pane("b", "down")]),
-                                          "create-in-apply")
+        got, consumed = self.m.create_tab(
+            self.client,
+            self.ws_id,
+            tab(panes=[pane("a"), pane("b", "down")]),
+            "create-in-apply",
+        )
         self.assertFalse(consumed)
         calls = self.fake.calls[first:]
         self.assertEqual([m for m, _ in calls], ["layout.apply", "tab.list"])
@@ -174,13 +213,17 @@ class CreateCase(unittest.TestCase):
         tab.create id died with the apply (replacement semantics).
         """
         first = len(self.fake.calls)
-        got, consumed = self.m.create_tab(self.client, self.ws_id,
-                                          tab(panes=[pane("a"), pane("b", "right")]),
-                                          "fallback")
+        got, consumed = self.m.create_tab(
+            self.client,
+            self.ws_id,
+            tab(panes=[pane("a"), pane("b", "right")]),
+            "fallback",
+        )
         self.assertFalse(consumed)
         calls = self.fake.calls[first:]
-        self.assertEqual([m for m, _ in calls],
-                         ["tab.create", "layout.apply", "tab.list"])
+        self.assertEqual(
+            [m for m, _ in calls], ["tab.create", "layout.apply", "tab.list"]
+        )
         apply_params = calls[1][1]
         # the apply was bound to a concrete tab id and carried the label
         self.assertEqual(sorted(apply_params), ["root", "tab_id", "tab_label"])
@@ -212,13 +255,14 @@ class CreateCase(unittest.TestCase):
         r = client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         ws_id = r["workspace"]["workspace_id"]
         first = len(fake.calls)
-        got, consumed = module.create_tab(client, ws_id,
-                                          tab(panes=[pane("a"), pane("b", "right")]),
-                                          "create-in-apply")
+        got, consumed = module.create_tab(
+            client, ws_id, tab(panes=[pane("a"), pane("b", "right")]), "create-in-apply"
+        )
         self.assertFalse(consumed)
         calls = fake.calls[first:]
-        self.assertEqual([meth for meth, _ in calls],
-                         ["tab.create", "layout.apply", "tab.list"])
+        self.assertEqual(
+            [meth for meth, _ in calls], ["tab.create", "layout.apply", "tab.list"]
+        )
         apply_params = calls[1][1]
         # the apply was bound to a concrete tab id and carried the label
         self.assertEqual(sorted(apply_params), ["root", "tab_id", "tab_label"])
@@ -228,8 +272,9 @@ class CreateCase(unittest.TestCase):
         self.assertNotIn(created_id, fake.tabs)
         self.assertIn(got, fake.tabs)
         self.assertNotEqual(got, created_id)
-        self.assertEqual([p["label"] for p in module.panes_of(client, ws_id, got)],
-                         ["a", "b"])
+        self.assertEqual(
+            [p["label"] for p in module.panes_of(client, ws_id, got)], ["a", "b"]
+        )
 
     def test_paneless_without_implicit_creates_plainly(self):
         """A pane-less tab with no implicit root tab: plain tab.create (v1
@@ -237,8 +282,9 @@ class CreateCase(unittest.TestCase):
         requested, because there is no tree to apply.
         """
         first = len(self.fake.calls)
-        got, consumed = self.m.create_tab(self.client, self.ws_id, tab(panes=[]),
-                                          "create-in-apply")
+        got, consumed = self.m.create_tab(
+            self.client, self.ws_id, tab(panes=[]), "create-in-apply"
+        )
         self.assertFalse(consumed)
         self.assertEqual([m for m, _ in self.fake.calls[first:]], ["tab.create"])
         self.assertIn(got, self.fake.tabs)
@@ -259,8 +305,12 @@ class CreateCase(unittest.TestCase):
         m, fake, client = harness.make_env(self, fake=Hider())
         r = client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         with self.assertRaises(m.HerdrError) as cm:
-            m.create_tab(client, r["workspace"]["workspace_id"],
-                         tab(panes=[pane("a")]), "create-in-apply")
+            m.create_tab(
+                client,
+                r["workspace"]["workspace_id"],
+                tab(panes=[pane("a")]),
+                "create-in-apply",
+            )
         self.assertIn("'T'", str(cm.exception))
         # the apply itself DID land (the tab exists; only its re-resolution
         # failed) -- create_tab is honest about what it cannot promise

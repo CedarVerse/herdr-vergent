@@ -1,6 +1,7 @@
 """Scripted herdr replacement for tests. Mirrors the semantics the seeder
 relies on: layout.apply with a tab_id REPLACES the whole tab (new id, old
 closed); pane.split has no label; agent.start sets PaneInfo.agent."""
+
 import json
 import os
 import socket
@@ -9,9 +10,9 @@ import threading
 
 class FakeHerdr:
     def __init__(self):
-        self.workspaces = {}   # id -> {label, path, tab_ids}
-        self.tabs = {}         # id -> {label, workspace_id, pane_ids, cwd}
-        self.panes = {}        # id -> {label, tab_id, cwd, foreground_cwd, agent}
+        self.workspaces = {}  # id -> {label, path, tab_ids}
+        self.tabs = {}  # id -> {label, workspace_id, pane_ids, cwd}
+        self.panes = {}  # id -> {label, tab_id, cwd, foreground_cwd, agent}
         self.calls = []
         self._fail = None
         self.drop_next = False  # close the conn instead of replying (EOF tests)
@@ -49,7 +50,9 @@ class FakeHerdr:
                 conn, _ = self._sock.accept()
             except OSError:
                 return
-            threading.Thread(target=self._handle_conn, args=(conn,), daemon=True).start()
+            threading.Thread(
+                target=self._handle_conn, args=(conn,), daemon=True
+            ).start()
 
     def _handle_conn(self, conn):
         buf = b""
@@ -81,7 +84,6 @@ class FakeHerdr:
         deterministic event injection for the client's skip path
         (tests/test_socket.py: Noisy, Trickle)."""
 
-
     def _dispatch(self, req):
         method, params = req["method"], req.get("params", {})
         self.calls.append((method, params))
@@ -91,7 +93,7 @@ class FakeHerdr:
             return {"id": req["id"], "error": f"{method}: {msg}"}
         try:
             result = getattr(self, "m_" + method.replace(".", "_"))(params)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- deliberate: a real server turns ANY handler crash into an error frame; the fake must mirror that
             return {"id": req["id"], "error": str(e)}
         return {"id": req["id"], "result": result}
 
@@ -100,12 +102,20 @@ class FakeHerdr:
         return f"w1:{kind}{self._n}"
 
     def m_workspace_list(self, p):
-        return {"workspaces": [{"workspace_id": i, "label": w["label"]}
-                               for i, w in self.workspaces.items()]}
+        return {
+            "workspaces": [
+                {"workspace_id": i, "label": w["label"]}
+                for i, w in self.workspaces.items()
+            ]
+        }
 
     def m_workspace_create(self, p):
         i = self._id("ws")
-        self.workspaces[i] = {"label": p.get("label"), "path": p.get("cwd"), "tab_ids": []}
+        self.workspaces[i] = {
+            "label": p.get("label"),
+            "path": p.get("cwd"),
+            "tab_ids": [],
+        }
         ti = self._id("t")
         pi = self._id("p")
         # Live-probed fidelity (design spec, Evidence appendix, side-finding
@@ -113,32 +123,64 @@ class FakeHerdr:
         # {"tab_id": "wJ:t1", "number": 1, "label": "1"} -- never unnamed.
         # Label-based snapshot matching and the seeder's adopt/rename of the
         # implicit tab both depend on this.
-        self.tabs[ti] = {"label": "1", "workspace_id": i, "pane_ids": [pi],
-                         "cwd": p.get("cwd")}
-        self.panes[pi] = {"label": None, "tab_id": ti, "cwd": p.get("cwd"),
-                          "foreground_cwd": p.get("cwd"), "agent": None}
+        self.tabs[ti] = {
+            "label": "1",
+            "workspace_id": i,
+            "pane_ids": [pi],
+            "cwd": p.get("cwd"),
+        }
+        self.panes[pi] = {
+            "label": None,
+            "tab_id": ti,
+            "cwd": p.get("cwd"),
+            "foreground_cwd": p.get("cwd"),
+            "agent": None,
+        }
         self.workspaces[i]["tab_ids"].append(ti)
-        return {"workspace": {"workspace_id": i, "label": p.get("label")},
-                "tab": {"tab_id": ti}, "root_pane": {"pane_id": pi}}
+        return {
+            "workspace": {"workspace_id": i, "label": p.get("label")},
+            "tab": {"tab_id": ti},
+            "root_pane": {"pane_id": pi},
+        }
 
     def m_tab_list(self, p):
-        tabs = [{"tab_id": i, "label": t["label"], "workspace_id": t["workspace_id"],
-                 "pane_count": len(t["pane_ids"])}
-                for i, t in self.tabs.items()
-                if p.get("workspace_id") in (None, t["workspace_id"])]
+        tabs = [
+            {
+                "tab_id": i,
+                "label": t["label"],
+                "workspace_id": t["workspace_id"],
+                "pane_count": len(t["pane_ids"]),
+            }
+            for i, t in self.tabs.items()
+            if p.get("workspace_id") in (None, t["workspace_id"])
+        ]
         return {"tabs": tabs}
 
     def m_tab_create(self, p):
         i = self._id("t")
         pi = self._id("p")
-        self.tabs[i] = {"label": p.get("label"), "workspace_id": p["workspace_id"],
-                        "pane_ids": [pi], "cwd": p.get("cwd")}
+        self.tabs[i] = {
+            "label": p.get("label"),
+            "workspace_id": p["workspace_id"],
+            "pane_ids": [pi],
+            "cwd": p.get("cwd"),
+        }
         self.workspaces[p["workspace_id"]]["tab_ids"].append(i)
-        self.panes[pi] = {"label": None, "tab_id": i, "cwd": p.get("cwd"),
-                          "foreground_cwd": p.get("cwd"), "agent": None}
-        return {"tab": {"tab_id": i, "label": p.get("label"),
-                        "workspace_id": p["workspace_id"]},
-                "root_pane": {"pane_id": pi}}
+        self.panes[pi] = {
+            "label": None,
+            "tab_id": i,
+            "cwd": p.get("cwd"),
+            "foreground_cwd": p.get("cwd"),
+            "agent": None,
+        }
+        return {
+            "tab": {
+                "tab_id": i,
+                "label": p.get("label"),
+                "workspace_id": p["workspace_id"],
+            },
+            "root_pane": {"pane_id": pi},
+        }
 
     def m_tab_rename(self, p):
         self.tabs[p["tab_id"]]["label"] = p.get("label")
@@ -150,18 +192,29 @@ class FakeHerdr:
             if p.get("workspace_id") in (None, t["workspace_id"]):
                 for pi in t["pane_ids"]:
                     pn = self.panes[pi]
-                    out.append({"pane_id": pi, "label": pn["label"], "tab_id": i,
-                                "cwd": pn["cwd"], "foreground_cwd": pn["foreground_cwd"],
-                                "agent": pn["agent"],
-                                "agent_name": pn.get("agent_name")})
+                    out.append(
+                        {
+                            "pane_id": pi,
+                            "label": pn["label"],
+                            "tab_id": i,
+                            "cwd": pn["cwd"],
+                            "foreground_cwd": pn["foreground_cwd"],
+                            "agent": pn["agent"],
+                            "agent_name": pn.get("agent_name"),
+                        }
+                    )
         return {"panes": out}
 
     def _walk(self, node, tab_id):
         if node["type"] == "pane":
             pi = self._id("p")
-            self.panes[pi] = {"label": node.get("label"), "tab_id": tab_id,
-                              "cwd": node.get("cwd"), "foreground_cwd": node.get("cwd"),
-                              "agent": None}
+            self.panes[pi] = {
+                "label": node.get("label"),
+                "tab_id": tab_id,
+                "cwd": node.get("cwd"),
+                "foreground_cwd": node.get("cwd"),
+                "agent": None,
+            }
             self.tabs[tab_id]["pane_ids"].append(pi)
             return
         self._walk(node["first"], tab_id)
@@ -177,14 +230,20 @@ class FakeHerdr:
         label = p.get("tab_label")
         if label is None and p.get("tab_id"):
             label = self.tabs[p["tab_id"]]["label"]
-        self.tabs[ni] = {"label": label, "workspace_id": wid, "pane_ids": [], "cwd": None}
+        self.tabs[ni] = {
+            "label": label,
+            "workspace_id": wid,
+            "pane_ids": [],
+            "cwd": None,
+        }
         self._walk(p["root"], ni)
         if p.get("tab_id"):
             old = self.tabs.pop(p["tab_id"])
             for pi in old["pane_ids"]:
                 self.panes.pop(pi, None)
             self.workspaces[wid]["tab_ids"] = [
-                i for i in self.workspaces[wid]["tab_ids"] if i != p["tab_id"]]
+                i for i in self.workspaces[wid]["tab_ids"] if i != p["tab_id"]
+            ]
             self.workspaces[wid]["tab_ids"].append(ni)
         elif p.get("workspace_id"):
             self.workspaces[p["workspace_id"]]["tab_ids"].append(ni)
@@ -193,8 +252,13 @@ class FakeHerdr:
     def m_pane_split(self, p):
         pi = self._id("p")
         tab_id = self.panes[p["target_pane_id"]]["tab_id"]
-        self.panes[pi] = {"label": None, "tab_id": tab_id, "cwd": p.get("cwd"),
-                          "foreground_cwd": p.get("cwd"), "agent": None}
+        self.panes[pi] = {
+            "label": None,
+            "tab_id": tab_id,
+            "cwd": p.get("cwd"),
+            "foreground_cwd": p.get("cwd"),
+            "agent": None,
+        }
         self.tabs[tab_id]["pane_ids"].append(pi)
         return {"pane": {"pane_id": pi}}
 
@@ -207,9 +271,23 @@ class FakeHerdr:
     # rejected literal text with "unsupported key echo scratch-logs-marker".
     # The first fake accepted anything, which is exactly why the seeder's
     # text-as-key bug survived four fake-based test tasks.
-    KEY_NAMES = {"Enter", "Escape", "Tab", "Backspace", "Delete",
-                 "Up", "Down", "Left", "Right", "Home", "End",
-                 "PageUp", "PageDown"}
+    KEY_NAMES = frozenset(
+        {
+            "Enter",
+            "Escape",
+            "Tab",
+            "Backspace",
+            "Delete",
+            "Up",
+            "Down",
+            "Left",
+            "Right",
+            "Home",
+            "End",
+            "PageUp",
+            "PageDown",
+        }
+    )
 
     def m_pane_send_keys(self, p):
         # Validate the WHOLE list before appending any: the real server

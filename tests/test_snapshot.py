@@ -8,6 +8,7 @@ live-probed side-finding 2 of the design spec; the fake's fidelity fix),
 pane.split adds an unnamed pane to the target pane's tab, and pane.rename
 labels exactly one pane.
 """
+
 import os
 import sys
 import unittest
@@ -35,21 +36,28 @@ class SnapshotCase(unittest.TestCase):
         ws_id = r["workspace"]["workspace_id"]
         root_tab_id = r["tab"]["tab_id"]
         root_pane_id = r["root_pane"]["pane_id"]
-        t = self.client.call("tab.create", {"workspace_id": ws_id, "label": "T",
-                                            "cwd": "/tmp"})
+        t = self.client.call(
+            "tab.create", {"workspace_id": ws_id, "label": "T", "cwd": "/tmp"}
+        )
         tab_t_id = t["tab"]["tab_id"]
         t_root_pane = t["root_pane"]["pane_id"]
-        split = self.client.call("pane.split", {"target_pane_id": t_root_pane,
-                                                "direction": "right",
-                                                "cwd": "/tmp"})
+        split = self.client.call(
+            "pane.split",
+            {"target_pane_id": t_root_pane, "direction": "right", "cwd": "/tmp"},
+        )
         split_pane = split["pane"]["pane_id"]
         self.client.call("pane.rename", {"pane_id": t_root_pane, "label": "shell"})
         u = self.client.call("tab.create", {"workspace_id": ws_id, "cwd": "/tmp"})
         unlabeled_tab_id = u["tab"]["tab_id"]
-        return {"ws_id": ws_id, "root_tab_id": root_tab_id,
-                "root_pane": root_pane_id,
-                "tab_t_id": tab_t_id, "t_root_pane": t_root_pane,
-                "split_pane": split_pane, "unlabeled_tab_id": unlabeled_tab_id}
+        return {
+            "ws_id": ws_id,
+            "root_tab_id": root_tab_id,
+            "root_pane": root_pane_id,
+            "tab_t_id": tab_t_id,
+            "t_root_pane": t_root_pane,
+            "split_pane": split_pane,
+            "unlabeled_tab_id": unlabeled_tab_id,
+        }
 
     def test_snapshot_structure(self):
         ids = self._seed()
@@ -69,17 +77,21 @@ class SnapshotCase(unittest.TestCase):
         # label ("1" -- the fake mirrors the live probe, side-finding 2)
         self.assertEqual(w["tabs"]["1"]["tab_id"], ids["root_tab_id"])
         # ...and its single pane IS mapped now that the tab carries a label
-        self.assertEqual(w["tabs"]["1"]["panes"][None]["pane_id"],
-                         ids["root_pane"])
+        self.assertEqual(w["tabs"]["1"]["panes"][None]["pane_id"], ids["root_pane"])
         # a genuinely label-less tab (created without one) has NO pane
         # entries in the snapshot (the tl-None guard skips its panes); the
         # reconciler re-lists via panes_of()
         self.assertEqual(w["tabs"][None]["tab_id"], ids["unlabeled_tab_id"])
         self.assertEqual(w["tabs"][None]["panes"], {})
         # all three tab ids are mapped to their labels
-        self.assertEqual(w["tab_id_to_label"],
-                         {ids["root_tab_id"]: "1", ids["tab_t_id"]: "T",
-                          ids["unlabeled_tab_id"]: None})
+        self.assertEqual(
+            w["tab_id_to_label"],
+            {
+                ids["root_tab_id"]: "1",
+                ids["tab_t_id"]: "T",
+                ids["unlabeled_tab_id"]: None,
+            },
+        )
 
     def test_snapshot_assembles_from_three_list_calls(self):
         """Exactly the three list calls, in order, on a one-workspace server:
@@ -92,10 +104,14 @@ class SnapshotCase(unittest.TestCase):
         first = len(self.fake.calls)  # skip the seeding calls
         snap = self.m.snapshot(self.client)
         self.assertEqual(set(snap), {"W"})
-        self.assertEqual([(m, p) for m, p in self.fake.calls[first:]],
-                         [("workspace.list", {}),
-                          ("tab.list", {"workspace_id": ids["ws_id"]}),
-                          ("pane.list", {"workspace_id": ids["ws_id"]})])
+        self.assertEqual(
+            [(m, p) for m, p in self.fake.calls[first:]],
+            [
+                ("workspace.list", {}),
+                ("tab.list", {"workspace_id": ids["ws_id"]}),
+                ("pane.list", {"workspace_id": ids["ws_id"]}),
+            ],
+        )
 
     def test_duplicate_pane_labels_collapse_last_wins(self):
         """Two live panes sharing a label in ONE tab: the snapshot map keeps
@@ -105,12 +121,14 @@ class SnapshotCase(unittest.TestCase):
         silent, never a crash or a duplicate key."""
         r = self.client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         ws_id = r["workspace"]["workspace_id"]
-        t = self.client.call("tab.create", {"workspace_id": ws_id, "label": "T",
-                                            "cwd": "/tmp"})
+        t = self.client.call(
+            "tab.create", {"workspace_id": ws_id, "label": "T", "cwd": "/tmp"}
+        )
         root_pane = t["root_pane"]["pane_id"]
-        split = self.client.call("pane.split", {"target_pane_id": root_pane,
-                                                "direction": "right",
-                                                "cwd": "/tmp"})
+        split = self.client.call(
+            "pane.split",
+            {"target_pane_id": root_pane, "direction": "right", "cwd": "/tmp"},
+        )
         split_pane = split["pane"]["pane_id"]
         self.client.call("pane.rename", {"pane_id": root_pane, "label": "shell"})
         self.client.call("pane.rename", {"pane_id": split_pane, "label": "shell"})

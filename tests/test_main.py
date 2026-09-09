@@ -12,6 +12,7 @@ read-only list calls reach the server while every mutation is recorded on
 the DryRunSocket wrapper -- checked both through main()'s printed plan
 count and through a direct DryRunSocket run that can assert on .planned.
 """
+
 import contextlib
 import io
 import os
@@ -57,11 +58,11 @@ class MainCase(unittest.TestCase):
         """One fresh workspace/tab, pane a (agent) + pane b (command): the
         everything-to-create shape, worth created=2 and 4 planned mutations."""
         return self.write_toml(
-            '[[workspace]]\nname = "W"\npath = "%s"\n\n'
+            f'[[workspace]]\nname = "W"\npath = "{self.real}"\n\n'
             '[[workspace.tab]]\nname = "T"\npath = "repo"\n'
             '[[workspace.tab.pane]]\nname = "a"\nagent = "claude"\n'
             '[[workspace.tab.pane]]\nname = "b"\ndirection = "right"\ncommand = "htop"\n'
-            % self.real)
+        )
 
     def run_main(self, argv):
         """main() with captured streams; returns (exit_code, stdout, stderr)."""
@@ -83,8 +84,9 @@ class MainCase(unittest.TestCase):
         self.assertIn("created=2 adopted=0 matched=0 skipped=0 failed=0", out)
         self.assertRegex(out, r"\[dry-run\] [1-9]\d* mutations planned")
         self.assertEqual(self.methods(), ["workspace.list"])
-        self.assertEqual((self.fake.workspaces, self.fake.tabs, self.fake.panes),
-                         ({}, {}, {}))
+        self.assertEqual(
+            (self.fake.workspaces, self.fake.tabs, self.fake.panes), ({}, {}, {})
+        )
         self.assertEqual(err, "")
 
     def test_dry_run_socket_records_plan_and_overlays(self):
@@ -95,13 +97,23 @@ class MainCase(unittest.TestCase):
         proves the overlay answers are coherent."""
         dry = self.m.DryRunSocket(self.client)
         lines = []
-        counters = self.m.reconcile(dry, self.m.load_model(self.fresh_toml()),
-                                    lines.append)
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
-        self.assertEqual([m for m, _ in dry.planned],
-                         ["workspace.create", "layout.apply",
-                          "agent.start", "pane.send_text", "pane.send_keys"])
+        counters = self.m.reconcile(
+            dry, self.m.load_model(self.fresh_toml()), lines.append
+        )
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
+        self.assertEqual(
+            [m for m, _ in dry.planned],
+            [
+                "workspace.create",
+                "layout.apply",
+                "agent.start",
+                "pane.send_text",
+                "pane.send_keys",
+            ],
+        )
         self.assertEqual(self.methods(), ["workspace.list"])
 
     def test_dry_run_overlays_planned_tab_into_existing_workspace(self):
@@ -115,18 +127,21 @@ class MainCase(unittest.TestCase):
         self.client.call("tab.rename", {"tab_id": root_tab, "label": "T"})
         self.mark = len(self.fake.calls)
         toml = self.write_toml(
-            '[[workspace]]\nname = "W"\npath = "%s"\n\n'
+            f'[[workspace]]\nname = "W"\npath = "{self.real}"\n\n'
             '[[workspace.tab]]\nname = "extra"\npath = "repo"\n'
-            % self.real)
+        )
         dry = self.m.DryRunSocket(self.client)
-        counters = self.m.reconcile(dry, self.m.load_model(toml),
-                                    lambda _m: None)
-        self.assertEqual(counters, {"created": 1, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
+        counters = self.m.reconcile(dry, self.m.load_model(toml), lambda _m: None)
+        self.assertEqual(
+            counters,
+            {"created": 1, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
         # pane-less tab -> tab.create is PLANNED (not forwarded); the walk
         # still re-lists panes afterwards, so the server sees lists only
-        self.assertEqual(self.methods()[self.mark:],
-                         ["workspace.list", "tab.list", "pane.list", "pane.list"])
+        self.assertEqual(
+            self.methods()[self.mark :],
+            ["workspace.list", "tab.list", "pane.list", "pane.list"],
+        )
         # scoped list = live tabs + the planned one, pass-through preserved
         tabs = dry.call("tab.list", {"workspace_id": ws_id})["tabs"]
         self.assertEqual([t["label"] for t in tabs], ["T", "extra"])
@@ -142,20 +157,23 @@ class MainCase(unittest.TestCase):
         self.assertIn("created=2 adopted=0 matched=0 skipped=0 failed=0", out)
         self.assertNotIn("[dry-run]", out)
         self.assertEqual(err, "")
-        self.assertEqual(self.methods()[:4],
-                         ["workspace.list", "workspace.create",
-                          "layout.apply", "tab.list"])
-        panes = {p["label"]: p for p in
-                 self.client.call("pane.list", {}).get("panes", [])}
+        self.assertEqual(
+            self.methods()[:4],
+            ["workspace.list", "workspace.create", "layout.apply", "tab.list"],
+        )
+        panes = {
+            p["label"]: p for p in self.client.call("pane.list", {}).get("panes", [])
+        }
         self.assertEqual(panes["a"]["agent"], "claude")
-        self.assertEqual(self.fake.panes[panes["b"]["pane_id"]].get("typed"),
-                         ["htop", "Enter"])
+        self.assertEqual(
+            self.fake.panes[panes["b"]["pane_id"]].get("typed"), ["htop", "Enter"]
+        )
 
     # --- exit codes ------------------------------------------------------------
 
     def test_validation_failure_exits_2_before_any_socket_traffic(self):
         toml = self.write_toml('[[workspace]]\nname = ""\n')
-        rc, out, err = self.run_main(["--toml", toml])
+        rc, _out, err = self.run_main(["--toml", toml])
         self.assertEqual(rc, self.m.EXIT_VALIDATION)
         self.assertIn("validation error:", err)
         self.assertEqual(self.fake.calls, [])  # aborted before the socket
@@ -176,29 +194,34 @@ class MainCase(unittest.TestCase):
         repo = os.path.join(self.real, "repo")
         r = self.client.call("workspace.create", {"label": "W", "cwd": repo})
         self.client.call("tab.rename", {"tab_id": r["tab"]["tab_id"], "label": "T"})
-        self.client.call("pane.rename",
-                         {"pane_id": r["root_pane"]["pane_id"], "label": "shell"})
+        self.client.call(
+            "pane.rename", {"pane_id": r["root_pane"]["pane_id"], "label": "shell"}
+        )
         self.mark = len(self.fake.calls)
         toml = self.write_toml(
-            '[[workspace]]\nname = "W"\npath = "%s"\n\n'
+            f'[[workspace]]\nname = "W"\npath = "{self.real}"\n\n'
             '[[workspace.tab]]\nname = "T"\npath = "repo"\n'
-            '[[workspace.tab.pane]]\nname = "shell"\n' % self.real)
+            '[[workspace.tab.pane]]\nname = "shell"\n'
+        )
         rc, out, err = self.run_main(["--toml", toml])
         self.assertEqual(rc, self.m.EXIT_OK)
         self.assertIn("created=0 adopted=0 matched=1 skipped=0 failed=0", out)
         self.assertEqual(err, "")
         # snapshot lists + the one panes_of the pre-existing walk costs
-        self.assertEqual(self.methods()[self.mark:],
-                         ["workspace.list", "tab.list", "pane.list", "pane.list"])
+        self.assertEqual(
+            self.methods()[self.mark :],
+            ["workspace.list", "tab.list", "pane.list", "pane.list"],
+        )
 
     def test_skipped_tab_exits_1(self):
         """skipped=0 AND failed=0 is the only clean exit: a tab whose path
         does not exist is skipped -> exit 1 even though nothing failed."""
         toml = self.write_toml(
-            '[[workspace]]\nname = "W"\npath = "%s"\n\n'
+            f'[[workspace]]\nname = "W"\npath = "{self.real}"\n\n'
             '[[workspace.tab]]\nname = "Ghost"\npath = "repo/missing"\n'
-            '[[workspace.tab.pane]]\nname = "a"\n' % self.real)
-        rc, out, err = self.run_main(["--toml", toml])
+            '[[workspace.tab.pane]]\nname = "a"\n'
+        )
+        rc, out, _err = self.run_main(["--toml", toml])
         self.assertEqual(rc, self.m.EXIT_FAILED)
         self.assertIn("created=1 adopted=0 matched=0 skipped=1 failed=0", out)
         self.assertIn("skipped (resolved path does not exist", out)
@@ -208,8 +231,9 @@ class MainCase(unittest.TestCase):
         before any socket traffic -- the OSError branch of load_model feeds
         the same contract as a bad document (main's mapping, not just the
         loader's exception type)."""
-        rc, out, err = self.run_main(["--toml",
-                                      os.path.join(self.real, "absent.toml")])
+        rc, _out, err = self.run_main(
+            ["--toml", os.path.join(self.real, "absent.toml")]
+        )
         self.assertEqual(rc, self.m.EXIT_VALIDATION)
         self.assertIn("validation error:", err)
         self.assertIn("cannot read TOML", err)
@@ -222,9 +246,10 @@ class MainCase(unittest.TestCase):
         absolute path and the run lands clean."""
         toml = self.write_toml(
             '[[workspace]]\nname = "W"\n\n'
-            '[[workspace.tab]]\nname = "T"\npath = "%s"\n'
-            '[[workspace.tab.pane]]\nname = "a"\n' % self.real)
-        rc, out, err = self.run_main(["--toml", toml])
+            f'[[workspace.tab]]\nname = "T"\npath = "{self.real}"\n'
+            '[[workspace.tab.pane]]\nname = "a"\n'
+        )
+        rc, _out, _err = self.run_main(["--toml", toml])
         self.assertEqual(rc, self.m.EXIT_OK)
         create = next(p for m, p in self.fake.calls if m == "workspace.create")
         self.assertNotIn("cwd", create)
@@ -243,23 +268,27 @@ class MainCase(unittest.TestCase):
         honest one (what the tab will really get).
         """
         toml = self.write_toml(
-            '[[workspace]]\nname = "W"\npath = "%s"\n\n'
-            '[[workspace.tab]]\nname = "T"\npath = "repo"\n' % self.real)
+            f'[[workspace]]\nname = "W"\npath = "{self.real}"\n\n'
+            '[[workspace.tab]]\nname = "T"\npath = "repo"\n'
+        )
         dry = self.m.DryRunSocket(self.client)
-        counters = self.m.reconcile(dry, self.m.load_model(toml),
-                                    lambda _m: None)
+        counters = self.m.reconcile(dry, self.m.load_model(toml), lambda _m: None)
         # fresh flow counts both the workspace and its tab as created
-        self.assertEqual(counters, {"created": 2, "adopted": 0, "matched": 0,
-                                    "skipped": 0, "failed": 0})
-        self.assertEqual([m for m, _ in dry.planned],
-                         ["workspace.create", "tab.create"])
+        self.assertEqual(
+            counters,
+            {"created": 2, "adopted": 0, "matched": 0, "skipped": 0, "failed": 0},
+        )
+        self.assertEqual(
+            [m for m, _ in dry.planned], ["workspace.create", "tab.create"]
+        )
         planned = dict(dry.planned)["tab.create"]
         self.assertEqual(planned["cwd"], os.path.join(self.real, "repo"))
         # overlay coherence: the planned tab is probeable under its label
         # (beside the label-less implicit twin the planned workspace
         # carries), and the server saw read-only traffic only
-        self.assertEqual([t["label"] for t in dry.dry_tabs.values()
-                          if t["label"]], ["T"])
+        self.assertEqual(
+            [t["label"] for t in dry.dry_tabs.values() if t["label"]], ["T"]
+        )
         self.assertEqual(self.methods(), ["workspace.list"])
 
     def test_dry_run_records_unknown_method_without_forwarding(self):
@@ -279,12 +308,18 @@ class MainCase(unittest.TestCase):
         the planned replacement with the real workspace inherited."""
         r = self.client.call("workspace.create", {"label": "W", "cwd": self.real})
         ws_id, root_tab = r["workspace"]["workspace_id"], r["tab"]["tab_id"]
-        self.client.call("pane.rename", {"pane_id": r["root_pane"]["pane_id"],
-                                         "label": "old"})
+        self.client.call(
+            "pane.rename", {"pane_id": r["root_pane"]["pane_id"], "label": "old"}
+        )
         dry = self.m.DryRunSocket(self.client)
-        dry.call("layout.apply", {"tab_id": root_tab, "tab_label": "new",
-                                  "root": {"type": "pane", "label": "fresh",
-                                           "cwd": self.real}})
+        dry.call(
+            "layout.apply",
+            {
+                "tab_id": root_tab,
+                "tab_label": "new",
+                "root": {"type": "pane", "label": "fresh", "cwd": self.real},
+            },
+        )
         self.assertIn(root_tab, dry.replaced_real)
         tabs = dry.call("tab.list", {"workspace_id": ws_id})["tabs"]
         self.assertEqual([t["label"] for t in tabs], ["new"])
@@ -305,13 +340,19 @@ class DirectExecCase(unittest.TestCase):
     def setUpClass(cls):
         cls.script = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "bin", "vergent.py")
+            "bin",
+            "vergent.py",
+        )
 
     def test_direct_execution_refused(self):
-        env = {k: v for k, v in os.environ.items()
-               if k != "HERDR_VERGENT_VIA_SHIM"}
-        r = subprocess.run([sys.executable, self.script], env=env,
-                           capture_output=True, text=True)
+        env = {k: v for k, v in os.environ.items() if k != "HERDR_VERGENT_VIA_SHIM"}
+        r = subprocess.run(
+            [sys.executable, self.script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )  # return code is the contract under test
         self.assertEqual(r.returncode, 2)
         self.assertIn("direct execution refused", r.stderr)
 
@@ -326,7 +367,10 @@ class DirectExecCase(unittest.TestCase):
             r = subprocess.run(
                 [sys.executable, self.script, "--toml", bad, "--dry-run"],
                 env={**os.environ, "HERDR_VERGENT_VIA_SHIM": "1"},
-                capture_output=True, text=True)
+                capture_output=True,
+                text=True,
+                check=False,
+            )  # return code is the contract under test
         self.assertNotIn("direct execution refused", r.stderr)
         self.assertIn("validation error", r.stderr)
 

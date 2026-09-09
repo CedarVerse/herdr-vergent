@@ -10,6 +10,7 @@ directory. client.close stays registered for API symmetry even though
 HerdrSocket.close is a documented no-op -- per-call sockets already close in
 call()'s finally, so there is nothing left for it to release.
 """
+
 import shutil
 import sys
 import tempfile

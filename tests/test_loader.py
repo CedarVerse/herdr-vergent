@@ -48,7 +48,7 @@ class LoaderCase(unittest.TestCase):
     # under the tab. The MODEL keeps herdr's wire word `label`.
 
     def ok_ws(self):
-        return '[[workspace]]\nname = "W"\npath = "%s"\n' % self.real
+        return f'[[workspace]]\nname = "W"\npath = "{self.real}"\n'
 
     def ok_tab(self, extra=""):
         return '[[workspace.tab]]\nname = "T"\n' + extra
@@ -57,9 +57,12 @@ class LoaderCase(unittest.TestCase):
         return '[[workspace.tab.pane]]\nname = "a"\n'  # valid root pane (plain)
 
     def test_happy_chain(self):
-        m = self.write(self.ok_ws() + self.ok_tab('path = "repo"\n')
-                       + self.p1()
-                       + '[[workspace.tab.pane]]\nname = "logs"\ncwd = "repo"\ndirection = "down"\nratio = 0.7\n')
+        m = self.write(
+            self.ok_ws()
+            + self.ok_tab('path = "repo"\n')
+            + self.p1()
+            + '[[workspace.tab.pane]]\nname = "logs"\ncwd = "repo"\ndirection = "down"\nratio = 0.7\n'
+        )
         t = m["workspaces"][0]["tabs"][0]
         self.assertNotIn("skip_reason", t)  # every cwd (tab + panes) exists
         self.assertEqual(t["path"], os.path.join(self.real, "repo"))
@@ -84,13 +87,15 @@ class LoaderCase(unittest.TestCase):
         every pane as a sibling delta, no ../ gymnastics. Omitted cwd
         still means the tab path (happy chain pins that branch).
         """
-        m = self.write(self.ok_ws() + self.ok_tab()  # inherits the workspace base (self.real)
-                       + '[[workspace.tab.pane]]\nname = "a"\ncwd = "repo"\n'
-                       + '[[workspace.tab.pane]]\nname = "b"\ncwd = "%s"\ndirection = "down"\n'
-                       % self.link)
+        m = self.write(
+            self.ok_ws()
+            + self.ok_tab()  # inherits the workspace base (self.real)
+            + '[[workspace.tab.pane]]\nname = "a"\ncwd = "repo"\n'
+            + f'[[workspace.tab.pane]]\nname = "b"\ncwd = "{self.link}"\ndirection = "down"\n'
+        )
         t = m["workspaces"][0]["tabs"][0]
         self.assertNotIn("skip_reason", t)
-        self.assertEqual(t["path"], self.real)          # inherited workspace base
+        self.assertEqual(t["path"], self.real)  # inherited workspace base
         self.assertEqual(t["panes"][0]["cwd"], os.path.join(self.real, "repo"))
         self.assertIsNone(t["panes"][0]["direction"])
         self.assertEqual(t["panes"][1]["cwd"], os.path.join(self.real, "repo"))
@@ -102,8 +107,12 @@ class LoaderCase(unittest.TestCase):
         at layout.apply/pane.split -- aborting later tabs instead of the
         promised per-tab skip. The whole tab skips, naming the pane.
         """
-        m = self.write(self.ok_ws() + self.ok_tab('path = "repo"\n') + self.p1()
-                       + '[[workspace.tab.pane]]\nname = "b"\ncwd = "nope"\ndirection = "down"\n')
+        m = self.write(
+            self.ok_ws()
+            + self.ok_tab('path = "repo"\n')
+            + self.p1()
+            + '[[workspace.tab.pane]]\nname = "b"\ncwd = "nope"\ndirection = "down"\n'
+        )
         t = m["workspaces"][0]["tabs"][0]
         self.assertIn("skip_reason", t)
         self.assertIn("'b'", t["skip_reason"])
@@ -140,100 +149,200 @@ class LoaderCase(unittest.TestCase):
         p1 = self.p1()
         rows = [
             ("empty document", "", "no [[workspace]] declared"),
-            ("workspace entry not a table", 'workspace = [1]\n',
-             "[[workspace]] #1: expected a table"),
-            ("workspace scalar instead of array", 'workspace = "W"\n',
-             "expected a list of tables"),
+            (
+                "workspace entry not a table",
+                "workspace = [1]\n",
+                "[[workspace]] #1: expected a table",
+            ),
+            (
+                "workspace scalar instead of array",
+                'workspace = "W"\n',
+                "expected a list of tables",
+            ),
             # Schema v2 strays must fail LOUDLY (they would otherwise parse
             # as an empty v3 document with every tab silently missing):
             # a top-level [[tab]] is the dead back-ref form.
-            ("v2 stray top-level tab", ws + '[[tab]]\nname = "T"\n',
-             "top-level [[tab]] is schema v2"),
-            ("v2 stray top-level pane", ws + '[[pane]]\nname = "p"\n',
-             "top-level [[pane]] is schema v2"),
+            (
+                "v2 stray top-level tab",
+                ws + '[[tab]]\nname = "T"\n',
+                "top-level [[tab]] is schema v2",
+            ),
+            (
+                "v2 stray top-level pane",
+                ws + '[[pane]]\nname = "p"\n',
+                "top-level [[pane]] is schema v2",
+            ),
             # `tab = ...` must precede any [[table]] header or it lands INSIDE
             # that table (TOML key-values bind to the most recent header).
-            ("nested tab not an array", ws + '[workspace.tab]\nname = "T"\n',
-             '"tab" must be a list of tables'),
-            ("pane entry not a table", tab + 'pane = [1]\n',
-             'pane #1: expected a table'),
-            ("pane scalar instead of array", tab + 'pane = "x"\n',
-             '"pane" must be a list of tables'),
-            ("empty workspace name", '[[workspace]]\nname = ""\npath = "/tmp"\n',
-             "[[workspace]] #1: name is required"),
-            ("missing workspace name", '[[workspace]]\npath = "/tmp"\n',
-             "[[workspace]] #1: name is required"),
-            ("duplicate workspace name",
-             ws + '[[workspace]]\nname = "W"\npath = "/tmp"\n',
-             'duplicate workspace name'),
-            ("relative workspace path", '[[workspace]]\nname = "W"\npath = "rel"\n',
-             "absolute or ~-prefixed"),
-            ("~user path", '[[workspace]]\nname = "W"\npath = "~ecc/x"\n',
-             "~user paths are not supported"),
-            ("workspace path wrong type", '[[workspace]]\nname = "W"\npath = 5\n',
-             "path must be a string"),
-            ("empty tab name", ws + '[[workspace.tab]]\nname = ""\n',
-             'tab #1: name is required'),
-            ("missing tab name", ws + '[[workspace.tab]]\npath = "repo"\n',
-             'tab #1: name is required'),
-            ("duplicate tab name per workspace",
-             tab + '[[workspace.tab]]\nname = "T"\n' + p1,
-             'duplicate tab name'),
-            ("tab path wrong type",
-             ws + self.ok_tab('path = 5\n') + p1,
-             "path must be a string"),
-            ("relative tab path under path-less workspace",
-             tab_none + 'path = "sub"\n' + p1, "relative path but workspace"),
+            (
+                "nested tab not an array",
+                ws + '[workspace.tab]\nname = "T"\n',
+                '"tab" must be a list of tables',
+            ),
+            (
+                "pane entry not a table",
+                tab + "pane = [1]\n",
+                "pane #1: expected a table",
+            ),
+            (
+                "pane scalar instead of array",
+                tab + 'pane = "x"\n',
+                '"pane" must be a list of tables',
+            ),
+            (
+                "empty workspace name",
+                '[[workspace]]\nname = ""\npath = "/tmp"\n',
+                "[[workspace]] #1: name is required",
+            ),
+            (
+                "missing workspace name",
+                '[[workspace]]\npath = "/tmp"\n',
+                "[[workspace]] #1: name is required",
+            ),
+            (
+                "duplicate workspace name",
+                ws + '[[workspace]]\nname = "W"\npath = "/tmp"\n',
+                "duplicate workspace name",
+            ),
+            (
+                "relative workspace path",
+                '[[workspace]]\nname = "W"\npath = "rel"\n',
+                "absolute or ~-prefixed",
+            ),
+            (
+                "~user path",
+                '[[workspace]]\nname = "W"\npath = "~ecc/x"\n',
+                "~user paths are not supported",
+            ),
+            (
+                "workspace path wrong type",
+                '[[workspace]]\nname = "W"\npath = 5\n',
+                "path must be a string",
+            ),
+            (
+                "empty tab name",
+                ws + '[[workspace.tab]]\nname = ""\n',
+                "tab #1: name is required",
+            ),
+            (
+                "missing tab name",
+                ws + '[[workspace.tab]]\npath = "repo"\n',
+                "tab #1: name is required",
+            ),
+            (
+                "duplicate tab name per workspace",
+                tab + '[[workspace.tab]]\nname = "T"\n' + p1,
+                "duplicate tab name",
+            ),
+            (
+                "tab path wrong type",
+                ws + self.ok_tab("path = 5\n") + p1,
+                "path must be a string",
+            ),
+            (
+                "relative tab path under path-less workspace",
+                tab_none + 'path = "sub"\n' + p1,
+                "relative path but workspace",
+            ),
             ("no path anywhere", tab_none + p1, "no path and workspace"),
-            ("direction forbidden on root pane",
-             tab + '[[workspace.tab.pane]]\nname = "a"\ndirection = "right"\n',
-             'direction forbidden'),
-            ("wrong-typed cwd on root pane",
-             tab + '[[workspace.tab.pane]]\nname = "a"\ncwd = 5\n',
-             "cwd must be a string"),
-            ("missing direction on pane #2", tab + p1 + '[[workspace.tab.pane]]\nname = "b"\n',
-             "direction must be one of"),
-            ("invalid direction enum on pane #2",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "up"\n',
-             "direction must be one of"),
-            ("duplicate pane name",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "a"\ndirection = "right"\n',
-             "duplicate pane name 'a'"),
-            ("empty pane name", tab + '[[workspace.tab.pane]]\nname = ""\n',
-             "pane #1: name is required"),
-            ("ratio out of range",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = 1.5\n',
-             "0 < ratio < 1"),
+            (
+                "direction forbidden on root pane",
+                tab + '[[workspace.tab.pane]]\nname = "a"\ndirection = "right"\n',
+                "direction forbidden",
+            ),
+            (
+                "wrong-typed cwd on root pane",
+                tab + '[[workspace.tab.pane]]\nname = "a"\ncwd = 5\n',
+                "cwd must be a string",
+            ),
+            (
+                "missing direction on pane #2",
+                tab + p1 + '[[workspace.tab.pane]]\nname = "b"\n',
+                "direction must be one of",
+            ),
+            (
+                "invalid direction enum on pane #2",
+                tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "up"\n',
+                "direction must be one of",
+            ),
+            (
+                "duplicate pane name",
+                tab + p1 + '[[workspace.tab.pane]]\nname = "a"\ndirection = "right"\n',
+                "duplicate pane name 'a'",
+            ),
+            (
+                "empty pane name",
+                tab + '[[workspace.tab.pane]]\nname = ""\n',
+                "pane #1: name is required",
+            ),
+            (
+                "ratio out of range",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = 1.5\n',
+                "0 < ratio < 1",
+            ),
             # The boundary values themselves: the schema is the OPEN interval,
             # so 0 and 1 are exactly as invalid as 1.5 (and a TOML `0`/`1`
             # arrives as int -- the numeric-type gate must let ints through
             # to the range check, not trip "must be a number" first).
-            ("ratio zero is not neutral",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = 0\n',
-             "0 < ratio < 1"),
-            ("ratio one is not neutral",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = 1\n',
-             "0 < ratio < 1"),
-            ("ratio true is not a number",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = true\n',
-             "ratio must be a number"),
-            ("ratio string is not a number",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = "0.5"\n',
-             "ratio must be a number"),
-            ("agent wrong type",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nagent = 5\n',
-             "agent must be a string"),
-            ("command wrong type",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\ncommand = true\n',
-             "command must be a string"),
-            ("agent and command together",
-             tab + '[[workspace.tab.pane]]\nname = "a"\nagent = "claude"\ncommand = "x"\n',
-             "mutually exclusive"),
+            (
+                "ratio zero is not neutral",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = 0\n',
+                "0 < ratio < 1",
+            ),
+            (
+                "ratio one is not neutral",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = 1\n',
+                "0 < ratio < 1",
+            ),
+            (
+                "ratio true is not a number",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = true\n',
+                "ratio must be a number",
+            ),
+            (
+                "ratio string is not a number",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nratio = "0.5"\n',
+                "ratio must be a number",
+            ),
+            (
+                "agent wrong type",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\nagent = 5\n',
+                "agent must be a string",
+            ),
+            (
+                "command wrong type",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\ncommand = true\n',
+                "command must be a string",
+            ),
+            (
+                "agent and command together",
+                tab
+                + '[[workspace.tab.pane]]\nname = "a"\nagent = "claude"\ncommand = "x"\n',
+                "mutually exclusive",
+            ),
             # _str_field guards (typed TOML scalars must die at the boundary,
             # never as TypeError deep in the reconciler).
-            ("pane cwd wrong type",
-             tab + p1 + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\ncwd = 5\n',
-             "cwd must be a string"),
+            (
+                "pane cwd wrong type",
+                tab
+                + p1
+                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\ncwd = 5\n',
+                "cwd must be a string",
+            ),
         ]
         for name, body, fragment in rows:
             with self.subTest(case=name):
@@ -246,9 +355,12 @@ class LoaderCase(unittest.TestCase):
         never an index. Numbers remain only for unnameable defects (the
         name itself missing), pinned by the matrix rows above.
         """
-        body = (self.ok_ws() + self.ok_tab()
-                + '[[workspace.tab.pane]]\nname = "a"\n'
-                + '[[workspace.tab.pane]]\nname = "b"\ndirection = "sideways"\n')
+        body = (
+            self.ok_ws()
+            + self.ok_tab()
+            + '[[workspace.tab.pane]]\nname = "a"\n'
+            + '[[workspace.tab.pane]]\nname = "b"\ndirection = "sideways"\n'
+        )
         with self.assertRaises(self.m.ValidationError) as cm:
             self.write(body)
         self.assertIn('"W" -> "T" -> "b"', str(cm.exception))
@@ -261,8 +373,9 @@ class LoaderCase(unittest.TestCase):
 
         def check_labels_across_workspaces(model):
             self.assertEqual([w["label"] for w in model["workspaces"]], ["W1", "W2"])
-            self.assertEqual([t["label"] for w in model["workspaces"] for t in w["tabs"]],
-                             ["T", "T"])
+            self.assertEqual(
+                [t["label"] for w in model["workspaces"] for t in w["tabs"]], ["T", "T"]
+            )
 
         def check_tab_path_inherits_workspace(model):
             t = model["workspaces"][0]["tabs"][0]
@@ -302,21 +415,36 @@ class LoaderCase(unittest.TestCase):
         # (kept explicit rather than a clever one-liner: nesting makes the
         # two-workspace case a sequence of ws-then-its-tab blocks)
         rows = [
-            ("same tab name allowed across different workspaces",
-             ws_row("W1", self.real) + ws_tab("T") + p1
-             + ws_row("W2", "/tmp") + ws_tab("T") + p1,
-             check_labels_across_workspaces),
-            ("omitted tab.path inherits workspace path",
-             tab + p1, check_tab_path_inherits_workspace),
-            ("bare ~ expands to $HOME without trailing separator",
-             '[[workspace]]\nname = "W"\npath = "~"\n' + ws_tab("T") + p1,
-             check_bare_tilde_expansion),
-            ("pane-less tab over missing directory is skipped",
-             ws + self.ok_tab('path = "nope"\n'),
-             check_paneless_tab_over_missing_dir_is_skipped),
-            ("tab path through a symlinked directory resolves to the real path",
-             ws + self.ok_tab(f'path = "{self.link}"\n') + p1,
-             check_symlinked_tab_path_resolves),
+            (
+                "same tab name allowed across different workspaces",
+                ws_row("W1", self.real)
+                + ws_tab("T")
+                + p1
+                + ws_row("W2", "/tmp")
+                + ws_tab("T")
+                + p1,
+                check_labels_across_workspaces,
+            ),
+            (
+                "omitted tab.path inherits workspace path",
+                tab + p1,
+                check_tab_path_inherits_workspace,
+            ),
+            (
+                "bare ~ expands to $HOME without trailing separator",
+                '[[workspace]]\nname = "W"\npath = "~"\n' + ws_tab("T") + p1,
+                check_bare_tilde_expansion,
+            ),
+            (
+                "pane-less tab over missing directory is skipped",
+                ws + self.ok_tab('path = "nope"\n'),
+                check_paneless_tab_over_missing_dir_is_skipped,
+            ),
+            (
+                "tab path through a symlinked directory resolves to the real path",
+                ws + self.ok_tab(f'path = "{self.link}"\n') + p1,
+                check_symlinked_tab_path_resolves,
+            ),
         ]
         for name, body, check in rows:
             with self.subTest(case=name):
@@ -324,9 +452,12 @@ class LoaderCase(unittest.TestCase):
 
     def test_skip_reason_tab_carries_panes(self):
         """A skipped tab keeps its panes so the reconciler can warn per pane."""
-        m = self.write(self.ok_ws() + self.ok_tab('path = "nope"\n')
-                       + '[[workspace.tab.pane]]\nname = "a"\n'
-                       + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\n')
+        m = self.write(
+            self.ok_ws()
+            + self.ok_tab('path = "nope"\n')
+            + '[[workspace.tab.pane]]\nname = "a"\n'
+            + '[[workspace.tab.pane]]\nname = "b"\ndirection = "down"\n'
+        )
         t = m["workspaces"][0]["tabs"][0]
         self.assertIn("skip_reason", t)
         self.assertEqual([p["name"] for p in t["panes"]], ["a", "b"])
@@ -359,6 +490,7 @@ class LoaderCase(unittest.TestCase):
                 with self.assertRaises(self.m.ValidationError) as cm:
                     self.m.load_model(path)
                 self.assertIn("cannot read TOML", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

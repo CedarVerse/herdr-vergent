@@ -8,12 +8,14 @@ and the README); converges the running server to the file. Stdlib only.
 Never spawns herdr; talks to the running server's socket (HERDR_SOCKET_PATH,
 injected by the plugin runtime, or ~/.config/herdr/herdr.sock).
 """
+
 import argparse
 import json
 import os
 import socket
 import sys
 import time
+
 # Import order is load-bearing here: sys must precede tomllib so the guard
 # below can print and exit on the box's default interpreter (3.10 has no
 # tomllib). Direct `./vergent.py` invocation bypasses the shim's
@@ -23,9 +25,11 @@ import time
 try:
     import tomllib
 except ModuleNotFoundError:
-    print("vergent: python >= 3.11 required (tomllib missing); "
-          "run bin/vergent.sh (it probes the right interpreter)",
-          file=sys.stderr)
+    print(
+        "vergent: python >= 3.11 required (tomllib missing); "
+        "run bin/vergent.sh (it probes the right interpreter)",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 # Contract (see shim + plan): 0 ok | 1 failures | 2 validation | 3 lock-busy (returned by the shim, not here)
@@ -57,7 +61,9 @@ def _expand(p):  # rule 1: bare ~ only
         # normpath kills the trailing separator bare "~" would produce
         # (os.path.join(home, "") == "$HOME/"), which would otherwise leak
         # into tab.create/pane.split payloads.
-        return os.path.normpath(os.path.join(os.path.expanduser("~"), p[2:] if len(p) > 1 else ""))
+        return os.path.normpath(
+            os.path.join(os.path.expanduser("~"), p[2:] if len(p) > 1 else "")
+        )
     if p.startswith("~"):
         raise ValidationError(f"~user paths are not supported: {p!r}")
     return p
@@ -112,7 +118,9 @@ def _load_pane(p, ctx, pane_index, tab_path):
         cwd = p.get("cwd")
     else:
         if direction not in SPLIT_DIRECTIONS:
-            raise ValidationError(f"{what}: direction must be one of {SPLIT_DIRECTIONS}")
+            raise ValidationError(
+                f"{what}: direction must be one of {SPLIT_DIRECTIONS}"
+            )
         cwd = p.get("cwd")
     if cwd is None:
         cwd = tab_path  # normalized: the tab path is already realpath'd
@@ -138,8 +146,14 @@ def _load_pane(p, ctx, pane_index, tab_path):
     command = _str_field(p.get("command"), f"{what}: command")
     if agent is not None and command is not None:
         raise ValidationError(f"{what}: agent and command are mutually exclusive")
-    return {"name": name, "cwd": cwd, "direction": direction,
-            "ratio": ratio, "agent": agent, "command": command}
+    return {
+        "name": name,
+        "cwd": cwd,
+        "direction": direction,
+        "ratio": ratio,
+        "agent": agent,
+        "command": command,
+    }
 
 
 def load_model(toml_path):
@@ -173,7 +187,8 @@ def load_model(toml_path):
         if stray in data:
             raise ValidationError(
                 f"top-level [[{stray}]] is schema v2; nest it: "
-                f"[[workspace.tab]] / [[workspace.tab.pane]]")
+                f"[[workspace.tab]] / [[workspace.tab.pane]]"
+            )
 
     ws_in = data.get("workspace")
     if ws_in is None:
@@ -205,13 +220,12 @@ def load_model(toml_path):
 
         tabs_in = w.get("tab")
         if tabs_in is not None and not isinstance(tabs_in, list):
-            raise ValidationError(f"{what}: \"tab\" must be a list of tables")
+            raise ValidationError(f'{what}: "tab" must be a list of tables')
         seen_tab = set()
         for j, t in enumerate(tabs_in or [], 1):
             if not isinstance(t, dict):
                 raise ValidationError(f"{what}: tab #{j}: expected a table")
-            tname = _nonempty(t.get("name"),
-                              f'{what}: tab #{j}: name is required')
+            tname = _nonempty(t.get("name"), f"{what}: tab #{j}: name is required")
             tctx = f'"{name}" -> "{tname}"'
             if tname in seen_tab:
                 raise ValidationError(f"{tctx}: duplicate tab name")
@@ -222,12 +236,14 @@ def load_model(toml_path):
                 if _is_rel(path):
                     if wpath is None:
                         raise ValidationError(
-                            f"{tctx}: relative path but workspace \"{name}\" has no path")
+                            f'{tctx}: relative path but workspace "{name}" has no path'
+                        )
                     path = _join(wpath, path)
             else:
                 if wpath is None:
                     raise ValidationError(
-                        f"{tctx}: no path and workspace \"{name}\" has no path")
+                        f'{tctx}: no path and workspace "{name}" has no path'
+                    )
                 path = wpath
             # Canonicalize AFTER resolution, BEFORE panes are loaded and the
             # isdir gate runs: pane cwds inherit/join onto this path (so they
@@ -238,14 +254,19 @@ def load_model(toml_path):
 
             panes_in = t.get("pane")
             if panes_in is not None and not isinstance(panes_in, list):
-                raise ValidationError(f"{tctx}: \"pane\" must be a list of tables")
-            panes, seen_pane = [], set()  # names are the reconciler's anchors: unique per tab
+                raise ValidationError(f'{tctx}: "pane" must be a list of tables')
+            panes, seen_pane = (
+                [],
+                set(),
+            )  # names are the reconciler's anchors: unique per tab
             for k, p in enumerate(panes_in or [], 1):
                 if not isinstance(p, dict):
-                    raise ValidationError(f'{tctx} -> pane #{k}: expected a table')
+                    raise ValidationError(f"{tctx} -> pane #{k}: expected a table")
                 pane = _load_pane(p, f"{tctx} -> ", k, path)
                 if pane["name"] in seen_pane:
-                    raise ValidationError(f'{tctx}: duplicate pane name {pane["name"]!r}')
+                    raise ValidationError(
+                        f"{tctx}: duplicate pane name {pane['name']!r}"
+                    )
                 seen_pane.add(pane["name"])
                 panes.append(pane)
 
@@ -263,15 +284,22 @@ def load_model(toml_path):
             else:
                 for pane in panes:
                     if not os.path.isdir(pane["cwd"]):
-                        missing = (f"pane {pane['name']!r} resolved path "
-                                   f"does not exist: {pane['cwd']}")
+                        missing = (
+                            f"pane {pane['name']!r} resolved path "
+                            f"does not exist: {pane['cwd']}"
+                        )
                         break
             if missing is not None:
-                wmodel["tabs"].append({"label": tname, "path": path,
-                                       "panes": panes, "skip_reason": missing})
+                wmodel["tabs"].append(
+                    {
+                        "label": tname,
+                        "path": path,
+                        "panes": panes,
+                        "skip_reason": missing,
+                    }
+                )
             else:
-                wmodel["tabs"].append({"label": tname, "path": path,
-                                       "panes": panes})
+                wmodel["tabs"].append({"label": tname, "path": path, "panes": panes})
         workspaces.append(wmodel)
     return {"workspaces": workspaces}
 
@@ -308,8 +336,11 @@ class HerdrSocket:
     """
 
     def __init__(self, path=None, timeout=REQUEST_TIMEOUT):
-        self.path = path or os.environ.get("HERDR_SOCKET_PATH") \
+        self.path = (
+            path
+            or os.environ.get("HERDR_SOCKET_PATH")
             or os.path.expanduser(SOCKET_FALLBACK)
+        )
         self.timeout = timeout
         self._seq = 0
 
@@ -402,6 +433,7 @@ class HerdrSocket:
 
 # --- Dry-run overlay ---------------------------------------------------------
 
+
 class DryRunSocket:
     """Dry-run client: records mutations without forwarding them, passes the
     three list calls through to the live server, and OVERLAYS a coherent
@@ -432,15 +464,25 @@ class DryRunSocket:
     # forwarded), so this set is the expected universe, kept for readers and
     # future assertions. tab.rename is in it even though the plan sketch
     # omitted it -- create_tab's implicit-root form issues it.
-    MUTATING = {"workspace.create", "tab.create", "tab.rename", "layout.apply",
-                "pane.split", "pane.rename", "pane.send_text",
-                "pane.send_keys", "agent.start"}
+    MUTATING = frozenset(
+        {
+            "workspace.create",
+            "tab.create",
+            "tab.rename",
+            "layout.apply",
+            "pane.split",
+            "pane.rename",
+            "pane.send_text",
+            "pane.send_keys",
+            "agent.start",
+        }
+    )
 
     def __init__(self, inner):
         self.inner = inner
-        self.planned = []           # (method, params) in call order
-        self.dry_workspaces = {}    # dry ws id -> {"label", "tabs": [dry tab ids]}
-        self.dry_tabs = {}          # dry tab id -> {"label", "workspace_id", "panes": [...]}
+        self.planned = []  # (method, params) in call order
+        self.dry_workspaces = {}  # dry ws id -> {"label", "tabs": [dry tab ids]}
+        self.dry_tabs = {}  # dry tab id -> {"label", "workspace_id", "panes": [...]}
         self.replaced_real = set()  # real tab ids a planned layout.apply closed
         self._n = 0
 
@@ -456,38 +498,63 @@ class DryRunSocket:
 
         def walk(node):
             if node["type"] == "pane":
-                leaves.append({"pane_id": self._dry("p"), "label": node.get("label"),
-                               "tab_id": tab_id, "cwd": node.get("cwd"),
-                               "foreground_cwd": node.get("cwd"), "agent": None})
+                leaves.append(
+                    {
+                        "pane_id": self._dry("p"),
+                        "label": node.get("label"),
+                        "tab_id": tab_id,
+                        "cwd": node.get("cwd"),
+                        "foreground_cwd": node.get("cwd"),
+                        "agent": None,
+                    }
+                )
             else:
                 walk(node["first"])
                 walk(node["second"])
 
         walk(root)
-        self.dry_tabs[tab_id] = {"label": label, "workspace_id": workspace_id,
-                                 "panes": leaves}
+        self.dry_tabs[tab_id] = {
+            "label": label,
+            "workspace_id": workspace_id,
+            "panes": leaves,
+        }
 
     def call(self, method, params=None):
         params = params or {}
         if method in ("workspace.list", "tab.list", "pane.list"):
             wid = params.get("workspace_id")
-            result = ({} if wid in self.dry_workspaces
-                      else self.inner.call(method, params))
+            result = (
+                {} if wid in self.dry_workspaces else self.inner.call(method, params)
+            )
             if method == "tab.list":
-                tabs = [t for t in result.get("tabs", [])
-                        if t["tab_id"] not in self.replaced_real]
-                tabs += [{"tab_id": i, "label": t["label"],
-                          "workspace_id": t["workspace_id"],
-                          "pane_count": len(t["panes"])}
-                         for i, t in self.dry_tabs.items()
-                         if wid in (None, t["workspace_id"])]
+                tabs = [
+                    t
+                    for t in result.get("tabs", [])
+                    if t["tab_id"] not in self.replaced_real
+                ]
+                tabs += [
+                    {
+                        "tab_id": i,
+                        "label": t["label"],
+                        "workspace_id": t["workspace_id"],
+                        "pane_count": len(t["panes"]),
+                    }
+                    for i, t in self.dry_tabs.items()
+                    if wid in (None, t["workspace_id"])
+                ]
                 result["tabs"] = tabs
             if method == "pane.list":
-                panes = [q for q in result.get("panes", [])
-                         if q["tab_id"] not in self.replaced_real]
-                panes += [q for t in self.dry_tabs.values()
-                          for q in t["panes"]
-                          if wid in (None, t["workspace_id"])]
+                panes = [
+                    q
+                    for q in result.get("panes", [])
+                    if q["tab_id"] not in self.replaced_real
+                ]
+                panes += [
+                    q
+                    for t in self.dry_tabs.values()
+                    for q in t["panes"]
+                    if wid in (None, t["workspace_id"])
+                ]
                 result["panes"] = panes
             return result
         # Everything below is a mutation: record, never forward, answer from
@@ -502,8 +569,11 @@ class DryRunSocket:
             # renamed or replaced before anything matches by label).
             self.dry_tabs[tid] = {"label": None, "workspace_id": wid, "panes": []}
             self.dry_workspaces[wid]["tabs"].append(tid)
-            return {"workspace": {"workspace_id": wid, "label": params.get("label")},
-                    "tab": {"tab_id": tid}, "root_pane": {"pane_id": self._dry("p")}}
+            return {
+                "workspace": {"workspace_id": wid, "label": params.get("label")},
+                "tab": {"tab_id": tid},
+                "root_pane": {"pane_id": self._dry("p")},
+            }
         if method == "tab.rename":
             # In dry-run mode this only ever aims at a planned tab (the
             # implicit-root form of a workspace created THIS run); a real-id
@@ -514,10 +584,15 @@ class DryRunSocket:
             return {}
         if method == "tab.create":
             tid = self._dry("t")
-            self.dry_tabs[tid] = {"label": params.get("label"),
-                                  "workspace_id": params.get("workspace_id"), "panes": []}
-            return {"tab": {"tab_id": tid, "label": params.get("label")},
-                    "root_pane": {"pane_id": self._dry("p")}}
+            self.dry_tabs[tid] = {
+                "label": params.get("label"),
+                "workspace_id": params.get("workspace_id"),
+                "panes": [],
+            }
+            return {
+                "tab": {"tab_id": tid, "label": params.get("label")},
+                "root_pane": {"pane_id": self._dry("p")},
+            }
         if method == "layout.apply":
             tid = self._dry("t")
             if params.get("tab_id"):
@@ -528,8 +603,9 @@ class DryRunSocket:
                     wid = stale["workspace_id"]
                     ws = self.dry_workspaces.get(wid)
                     if ws is not None:
-                        ws["tabs"] = [tid if i == params["tab_id"] else i
-                                      for i in ws["tabs"]]
+                        ws["tabs"] = [
+                            tid if i == params["tab_id"] else i for i in ws["tabs"]
+                        ]
                 else:
                     # Replacing a LIVE tab: hide it (and its panes) from every
                     # later list -- server-side it is closed the moment this
@@ -555,6 +631,7 @@ class DryRunSocket:
 
 # --- Live snapshot -----------------------------------------------------------
 
+
 def snapshot(sock):
     """Live herdr state, for LABEL matching only:
     {ws_label: {"workspace_id", "tabs": {tab_label: {"tab_id", "panes"}},
@@ -568,10 +645,15 @@ def snapshot(sock):
     """
     snap = {}
     for w in sock.call("workspace.list", {}).get("workspaces", []):
-        snap[w["label"]] = {"workspace_id": w["workspace_id"], "tabs": {},
-                            "tab_id_to_label": {}}
+        snap[w["label"]] = {
+            "workspace_id": w["workspace_id"],
+            "tabs": {},
+            "tab_id_to_label": {},
+        }
     for entry in snap.values():
-        tabs = sock.call("tab.list", {"workspace_id": entry["workspace_id"]}).get("tabs", [])
+        tabs = sock.call("tab.list", {"workspace_id": entry["workspace_id"]}).get(
+            "tabs", []
+        )
         for t in tabs:
             # Twin of the pane-collapse note below: duplicate live TAB labels
             # within a workspace collapse the same way (last wins) --
@@ -581,7 +663,9 @@ def snapshot(sock):
             # model bug; the matcher only needs ONE tab per label to anchor.
             entry["tabs"][t.get("label")] = {"tab_id": t["tab_id"], "panes": {}}
             entry["tab_id_to_label"][t["tab_id"]] = t.get("label")
-        panes = sock.call("pane.list", {"workspace_id": entry["workspace_id"]}).get("panes", [])
+        panes = sock.call("pane.list", {"workspace_id": entry["workspace_id"]}).get(
+            "panes", []
+        )
         for p in panes:
             tl = entry["tab_id_to_label"].get(p["tab_id"])
             # Duplicate pane labels within a tab collapse here (last wins) --
@@ -602,6 +686,7 @@ def snapshot(sock):
 
 # --- Fresh-tab creation ------------------------------------------------------
 
+
 def panes_of(sock, workspace_id, tab_id):
     """Ordered live pane inventory of ONE tab (full list, never name-keyed).
 
@@ -609,8 +694,11 @@ def panes_of(sock, workspace_id, tab_id):
     design, so anything that needs pane ORDER or CARDINALITY (creation,
     orphan adoption) re-lists through here instead of trusting the tree.
     """
-    return [p for p in sock.call("pane.list", {"workspace_id": workspace_id}).get("panes", [])
-            if p["tab_id"] == tab_id]
+    return [
+        p
+        for p in sock.call("pane.list", {"workspace_id": workspace_id}).get("panes", [])
+        if p["tab_id"] == tab_id
+    ]
 
 
 def _eff_cwd(p):
@@ -658,9 +746,13 @@ def build_tree(panes):
 
     tree = leaf(panes[0])
     for p in panes[1:]:
-        tree = {"type": "split", "direction": p["direction"],
-                "ratio": _wire_ratio(p["ratio"]),
-                "first": tree, "second": leaf(p)}
+        tree = {
+            "type": "split",
+            "direction": p["direction"],
+            "ratio": _wire_ratio(p["ratio"]),
+            "first": tree,
+            "second": leaf(p),
+        }
     return tree
 
 
@@ -717,34 +809,46 @@ def create_tab(sock, workspace_id, tab, creation_form, implicit_root_tab_id=None
         if implicit_root_tab_id is not None:
             root = panes_of(sock, workspace_id, implicit_root_tab_id)
             if len(root) == 1 and _eff_cwd(root[0]) == tab["path"]:
-                sock.call("tab.rename", {"tab_id": implicit_root_tab_id,
-                                         "label": tab["label"]})
+                sock.call(
+                    "tab.rename",
+                    {"tab_id": implicit_root_tab_id, "label": tab["label"]},
+                )
                 return implicit_root_tab_id, True
             # cwd mismatch (or an unreadable/ambiguous root inventory):
             # fall through to a fresh tab at the DECLARED path; the
             # implicit root stays and the caller keeps it booked.
-        r = sock.call("tab.create", {"workspace_id": workspace_id, "cwd": tab["path"],
-                                     "label": tab["label"]})
+        r = sock.call(
+            "tab.create",
+            {"workspace_id": workspace_id, "cwd": tab["path"], "label": tab["label"]},
+        )
         return r["tab"]["tab_id"], False
 
     tree = build_tree(tab["panes"])
     consumed = False
     if implicit_root_tab_id is not None:
-        sock.call("layout.apply", {"tab_id": implicit_root_tab_id,
-                                   "tab_label": tab["label"], "root": tree})
+        sock.call(
+            "layout.apply",
+            {"tab_id": implicit_root_tab_id, "tab_label": tab["label"], "root": tree},
+        )
         consumed = True  # the apply disposes of the implicit tab
     # Tolerant dispatch, deliberately: ANY creation_form other than the
     # probed CREATION_FORM (or fact a unconfirmed) takes the fallback --
     # an unknown form value must fail closed onto the probed-safe path,
     # never raise or pass through silently.
     elif creation_form == CREATION_FORM and FACT_A_CONFIRMED:
-        sock.call("layout.apply", {"workspace_id": workspace_id,
-                                   "tab_label": tab["label"], "root": tree})
+        sock.call(
+            "layout.apply",
+            {"workspace_id": workspace_id, "tab_label": tab["label"], "root": tree},
+        )
     else:
-        r = sock.call("tab.create", {"workspace_id": workspace_id, "cwd": tab["path"],
-                                     "label": tab["label"]})
-        sock.call("layout.apply", {"tab_id": r["tab"]["tab_id"],
-                                   "tab_label": tab["label"], "root": tree})
+        r = sock.call(
+            "tab.create",
+            {"workspace_id": workspace_id, "cwd": tab["path"], "label": tab["label"]},
+        )
+        sock.call(
+            "layout.apply",
+            {"tab_id": r["tab"]["tab_id"], "tab_label": tab["label"], "root": tree},
+        )
 
     # Re-resolve by label: the only id source that survives replacement.
     # Exact match, first hit -- labels are unique per workspace by the
@@ -757,6 +861,7 @@ def create_tab(sock, workspace_id, tab, creation_form, implicit_root_tab_id=None
 
 
 # --- Reconcile: pre-existing tabs + one-shot effects -------------------------
+
 
 def index_panes(live, log, tab_label):
     """Name index over the ordered inventory; duplicate names warn once and
@@ -793,31 +898,47 @@ def reconcile(sock, model, log):
                 # tab this run just filled means the server dropped/mangled a
                 # label -- a SILENT skip here would hide a convergence hole
                 # behind a clean exit, so count it like any other failure.
-                log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: not found "
-                    f"in fresh tab -- one-shot skipped")
+                log(
+                    f"  ~ tab {tab['label']!r}: pane {d['name']!r}: not found "
+                    f"in fresh tab -- one-shot skipped"
+                )
                 counters["failed"] += 1
                 continue
             if d.get("agent"):
                 if p.get("agent"):
-                    log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: agent "
-                        f"{p['agent']!r} already present, skipping start")
+                    log(
+                        f"  ~ tab {tab['label']!r}: pane {d['name']!r}: agent "
+                        f"{p['agent']!r} already present, skipping start"
+                    )
                     continue
                 try:
-                    sock.call("agent.start", {"name": d["name"], "kind": d["agent"],
-                                              "pane_id": p["pane_id"],
-                                              "timeout_ms": AGENT_START_TIMEOUT_MS})
+                    sock.call(
+                        "agent.start",
+                        {
+                            "name": d["name"],
+                            "kind": d["agent"],
+                            "pane_id": p["pane_id"],
+                            "timeout_ms": AGENT_START_TIMEOUT_MS,
+                        },
+                    )
                 except HerdrError as e:
                     fresh = sock.call("pane.list", {}).get("panes", [])
                     now = next((q for q in fresh if q["pane_id"] == p["pane_id"]), {})
                     if now.get("agent"):
-                        log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: started "
-                            f"(confirmed after timeout/error)")
+                        log(
+                            f"  ~ tab {tab['label']!r}: pane {d['name']!r}: started "
+                            f"(confirmed after timeout/error)"
+                        )
                     else:
-                        log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: "
-                            f"agent.start failed: {e}")
+                        log(
+                            f"  ~ tab {tab['label']!r}: pane {d['name']!r}: "
+                            f"agent.start failed: {e}"
+                        )
                         counters["failed"] += 1
                     continue
-                log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: agent {d['agent']} started")
+                log(
+                    f"  ~ tab {tab['label']!r}: pane {d['name']!r}: agent {d['agent']} started"
+                )
             elif d.get("command"):
                 # Per-item containment, like the walk's other pane effects:
                 # one pane's keystrokes failing must not abort the tab (or
@@ -836,13 +957,18 @@ def reconcile(sock, model, log):
                 # count the pane as matched, and matched panes are never
                 # mutated.
                 try:
-                    sock.call("pane.send_text", {"pane_id": p["pane_id"],
-                                                 "text": d["command"]})
-                    sock.call("pane.send_keys", {"pane_id": p["pane_id"],
-                                                 "keys": ["Enter"]})
+                    sock.call(
+                        "pane.send_text",
+                        {"pane_id": p["pane_id"], "text": d["command"]},
+                    )
+                    sock.call(
+                        "pane.send_keys", {"pane_id": p["pane_id"], "keys": ["Enter"]}
+                    )
                 except HerdrError as e:
-                    log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: "
-                        f"command failed: {e}")
+                    log(
+                        f"  ~ tab {tab['label']!r}: pane {d['name']!r}: "
+                        f"command failed: {e}"
+                    )
                     counters["failed"] += 1
                     continue
                 log(f"  ~ tab {tab['label']!r}: pane {d['name']!r}: command sent")
@@ -858,9 +984,12 @@ def reconcile(sock, model, log):
                 # way to say "no path".
                 create_params["cwd"] = ws["path"]
             r = sock.call("workspace.create", create_params)
-            live_ws = {"workspace_id": r["workspace"]["workspace_id"],
-                       "tabs": {}, "tab_id_to_label": {},
-                       "implicit_root_tab_id": r["tab"]["tab_id"]}
+            live_ws = {
+                "workspace_id": r["workspace"]["workspace_id"],
+                "tabs": {},
+                "tab_id_to_label": {},
+                "implicit_root_tab_id": r["tab"]["tab_id"],
+            }
             counters["created"] += 1
             fresh_ws = True
         else:
@@ -877,11 +1006,18 @@ def reconcile(sock, model, log):
                 # tab rides plain tab.create, so naming layout.apply would lie.
                 how = " via layout.apply" if tab["panes"] else ""
                 log(f"  + tab {tab['label']} ({len(tab['panes'])} panes{how})")
-                implicit = (live_ws.get("implicit_root_tab_id")
-                            if fresh_ws and idx == 0 else None)
+                implicit = (
+                    live_ws.get("implicit_root_tab_id")
+                    if fresh_ws and idx == 0
+                    else None
+                )
                 tab_id, implicit_consumed = create_tab(
-                    sock, live_ws["workspace_id"], tab, form,
-                    implicit_root_tab_id=implicit)
+                    sock,
+                    live_ws["workspace_id"],
+                    tab,
+                    form,
+                    implicit_root_tab_id=implicit,
+                )
                 if implicit is not None and implicit_consumed:
                     live_ws["implicit_root_tab_id"] = None  # consumed: filled
                     # (panes) or renamed away. Unconsumed (fresh tab created
@@ -893,7 +1029,9 @@ def reconcile(sock, model, log):
                 one_shots(tab, live, {d["name"] for d in tab["panes"]})
                 counters["created"] += 1
                 continue
-            reconcile_preexisting(sock, live_ws, live_tab, tab, log, counters, one_shots)
+            reconcile_preexisting(
+                sock, live_ws, live_tab, tab, log, counters, one_shots
+            )
 
         if fresh_ws and live_ws.get("implicit_root_tab_id") is not None:
             # Nothing consumed workspace.create's implicit tab: declared
@@ -904,15 +1042,17 @@ def reconcile(sock, model, log):
             # bug class looked from the outside -- make it visible; the
             # superset rule protects the tab, so this is a warning, not a
             # failure.
-            log(f"  ~ workspace {ws['label']!r}: herdr's implicit '1' tab "
-                f"remains (nothing consumed it); superset rule protects it")
+            log(
+                f"  ~ workspace {ws['label']!r}: herdr's implicit '1' tab "
+                f"remains (nothing consumed it); superset rule protects it"
+            )
     return counters
 
 
 def reconcile_preexisting(sock, live_ws, live_tab, tab, log, counters, one_shots):
     ws_id = live_ws["workspace_id"]
     tab_id = live_tab["tab_id"]
-    live = panes_of(sock, ws_id, tab_id)      # ordered FULL inventory
+    live = panes_of(sock, ws_id, tab_id)  # ordered FULL inventory
     by_name = index_panes(live, log, tab["label"])
     # Names this run brought into being -- adopted ORPHANS and freshly split
     # panes alike (hence "touched", not "adopted"): they are exactly the
@@ -925,28 +1065,37 @@ def reconcile_preexisting(sock, live_ws, live_tab, tab, log, counters, one_shots
             declared_agent = d.get("agent")
             if declared_agent and by_name[d["name"]].get("agent") != declared_agent:
                 # degraded declared agent: convergence FAILS (oracle), no respawn
-                log(f"  ~ tab {tab['label']!r}: pane {d['name']!r} declared agent "
+                log(
+                    f"  ~ tab {tab['label']!r}: pane {d['name']!r} declared agent "
                     f"{declared_agent!r} but live agent is "
-                    f"{by_name[d['name']].get('agent')!r}")
+                    f"{by_name[d['name']].get('agent')!r}"
+                )
                 counters["failed"] += 1
             continue
         cwd = tab["path"] if idx == 0 else d["cwd"]
         if idx == 0:
             unnamed = [p for p in live if not p.get("label")]
-            adoptable = (len(live) == 1 and len(unnamed) == 1
-                         and not unnamed[0].get("agent")
-                         and _eff_cwd(unnamed[0]) == cwd)
+            adoptable = (
+                len(live) == 1
+                and len(unnamed) == 1
+                and not unnamed[0].get("agent")
+                and _eff_cwd(unnamed[0]) == cwd
+            )
             if adoptable:
                 pu = unnamed[0]
                 try:
-                    sock.call("pane.rename", {"pane_id": pu["pane_id"], "label": d["name"]})
+                    sock.call(
+                        "pane.rename", {"pane_id": pu["pane_id"], "label": d["name"]}
+                    )
                 except HerdrError as e:
                     # Per-item containment: the pane stays unnamed, the next
                     # run's adoption reclaims it, and the rest of the walk
                     # goes on (creation/transport failures still abort at the
                     # top level -- only this call's failure lands here).
-                    log(f"  ~ tab {tab['label']!r}: pane {d['name']!r} adoption "
-                        f"rename failed: {e}")
+                    log(
+                        f"  ~ tab {tab['label']!r}: pane {d['name']!r} adoption "
+                        f"rename failed: {e}"
+                    )
                     counters["failed"] += 1
                     continue
                 pu["label"] = d["name"]
@@ -964,26 +1113,39 @@ def reconcile_preexisting(sock, live_ws, live_tab, tab, log, counters, one_shots
                 # other refusal shape. (Deviation from the plan's single
                 # unified message, required by the spec sentence above.)
                 o = unnamed[0]
-                log(f"  = tab {tab['label']!r}: skipped (pane #1 {d['name']!r}: single live "
+                log(
+                    f"  = tab {tab['label']!r}: skipped (pane #1 {d['name']!r}: single live "
                     f"pane not adoptable -- agent {o.get('agent')!r}, cwd "
-                    f"{_eff_cwd(o)!r} vs declared {cwd!r})")
+                    f"{_eff_cwd(o)!r} vs declared {cwd!r})"
+                )
             else:
-                log(f"  = tab {tab['label']!r}: skipped (no live pane matches pane #1 "
-                    f"{d['name']!r}; {len(live)} live panes)")
+                log(
+                    f"  = tab {tab['label']!r}: skipped (no live pane matches pane #1 "
+                    f"{d['name']!r}; {len(live)} live panes)"
+                )
             counters["skipped"] += 1
             return
         # position >= 2: orphan adoption first (unnamed + agentless + cwd match)
-        orphan = next((q for q in live
-                       if not q.get("label") and not q.get("agent")
-                       and _eff_cwd(q) == d["cwd"]), None)
+        orphan = next(
+            (
+                q
+                for q in live
+                if not q.get("label") and not q.get("agent") and _eff_cwd(q) == d["cwd"]
+            ),
+            None,
+        )
         if orphan is not None:
             try:
-                sock.call("pane.rename", {"pane_id": orphan["pane_id"], "label": d["name"]})
+                sock.call(
+                    "pane.rename", {"pane_id": orphan["pane_id"], "label": d["name"]}
+                )
             except HerdrError as e:
                 # Same containment: the orphan stays unnamed for the next run;
                 # dependents lose their anchor, unrelated items go on.
-                log(f"  ~ tab {tab['label']!r}: pane {d['name']!r} adoption "
-                    f"rename failed: {e}")
+                log(
+                    f"  ~ tab {tab['label']!r}: pane {d['name']!r} adoption "
+                    f"rename failed: {e}"
+                )
                 counters["failed"] += 1
                 anchor_label = None
                 continue
@@ -995,28 +1157,38 @@ def reconcile_preexisting(sock, live_ws, live_tab, tab, log, counters, one_shots
             anchor_label = d["name"]
             continue
         if anchor_label is None:
-            log(f"  ~ tab {tab['label']!r}: pane {d['name']!r} skipped (no live anchor)")
+            log(
+                f"  ~ tab {tab['label']!r}: pane {d['name']!r} skipped (no live anchor)"
+            )
             counters["skipped"] += 1
             continue
         anchor = by_name.get(anchor_label)
         if anchor is None:
-            log(f"  ~ tab {tab['label']!r}: pane {d['name']!r} skipped (anchor "
-                f"{anchor_label!r} unavailable)")
+            log(
+                f"  ~ tab {tab['label']!r}: pane {d['name']!r} skipped (anchor "
+                f"{anchor_label!r} unavailable)"
+            )
             counters["skipped"] += 1
             continue
         try:
-            r = sock.call("pane.split", {"direction": d["direction"], "cwd": d["cwd"],
-                                         # Loader always stores the key (None when
-                                         # the TOML omitted it), so a .get() default
-                                         # would never fire -- normalize like
-                                         # build_tree does: None must not reach
-                                         # the wire (server schema requires ratio).
-                                         "ratio": _wire_ratio(d["ratio"]),
-                                         "target_pane_id": anchor["pane_id"]})
+            r = sock.call(
+                "pane.split",
+                {
+                    "direction": d["direction"],
+                    "cwd": d["cwd"],
+                    # Loader always stores the key (None when
+                    # the TOML omitted it), so a .get() default
+                    # would never fire -- normalize like
+                    # build_tree does: None must not reach
+                    # the wire (server schema requires ratio).
+                    "ratio": _wire_ratio(d["ratio"]),
+                    "target_pane_id": anchor["pane_id"],
+                },
+            )
         except HerdrError as e:
             log(f"  ~ tab {tab['label']!r}: pane {d['name']!r} split failed: {e}")
             counters["failed"] += 1
-            anchor_label = None          # dependents skip cleanly
+            anchor_label = None  # dependents skip cleanly
             continue
         new_id = r["pane"]["pane_id"]
         try:
@@ -1054,19 +1226,26 @@ def main(argv=None):
         print(f"validation error: {e}", file=sys.stderr)
         return EXIT_VALIDATION
     sock = HerdrSocket()
+    dry = None  # the overlay when --dry-run; typed separately so ty can
+    # narrow `dry.planned` below (a union HerdrSocket | DryRunSocket cannot)
     if args.dry_run:
-        sock = DryRunSocket(sock)
+        dry = DryRunSocket(sock)
+        sock = dry
     try:
         counters = reconcile(sock, model, log=print)
     except (ValidationError, HerdrError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
         return EXIT_FAILED
-    print(f"created={counters['created']} adopted={counters['adopted']} "
-          f"matched={counters['matched']} skipped={counters['skipped']} "
-          f"failed={counters['failed']}")
-    if args.dry_run:
-        print(f"[dry-run] {len(sock.planned)} mutations planned - none executed")
-    return EXIT_OK if counters["failed"] == 0 and counters["skipped"] == 0 else EXIT_FAILED
+    print(
+        f"created={counters['created']} adopted={counters['adopted']} "
+        f"matched={counters['matched']} skipped={counters['skipped']} "
+        f"failed={counters['failed']}"
+    )
+    if dry is not None:
+        print(f"[dry-run] {len(dry.planned)} mutations planned - none executed")
+    return (
+        EXIT_OK if counters["failed"] == 0 and counters["skipped"] == 0 else EXIT_FAILED
+    )
 
 
 if __name__ == "__main__":
@@ -1078,8 +1257,10 @@ if __name__ == "__main__":
     # HERDR_VERGENT_VIA_SHIM, exported right before its exec (below the
     # flock). Importing this module (tests, tooling) is unaffected.
     if os.environ.get("HERDR_VERGENT_VIA_SHIM") != "1":
-        print("vergent: direct execution refused; run "
-              "bin/vergent.sh (flock + server guards live there)",
-              file=sys.stderr)
+        print(
+            "vergent: direct execution refused; run "
+            "bin/vergent.sh (flock + server guards live there)",
+            file=sys.stderr,
+        )
         sys.exit(2)
     sys.exit(main())

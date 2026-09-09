@@ -11,8 +11,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# CI composes the SAME Makefile targets developers run locally:
+# check-ro is the read-only merge gate (no auto-format in CI), the matrix
+# re-runs the unit suite across every supported interpreter.
 jobs:
-  unittest:
+  check-ro:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - run: make check-ro
+
+  test-matrix:
     strategy:
       matrix:
         python: ["3.11", "3.12", "3.13", "3.14"]
@@ -22,11 +35,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m unittest discover -s tests -v
-
-  shellcheck:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    steps:
-      - uses: actions/checkout@v4
-      - run: sudo apt-get update -y && sudo apt-get install -y shellcheck
-      - run: shellcheck bin/vergent.sh
+      - run: make test-unit PYTHON=python

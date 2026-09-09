@@ -11,6 +11,7 @@ fixture work): the lock-busy exit 3, the no-lazy-spawn guard, the
 interpreter-probe fallback chain, and the exec handoff to the seeder --
 the seeder side of that handoff is covered end to end by test_main.py.
 """
+
 import pathlib
 import subprocess
 import unittest
@@ -21,8 +22,13 @@ STARTER = pathlib.Path(__file__).resolve().parents[1] / "projects.starter.toml"
 
 class ShimCase(unittest.TestCase):
     def run_shim(self, *args):
-        return subprocess.run(["bash", str(SHIM), *args],
-                              capture_output=True, text=True, timeout=30)
+        return subprocess.run(
+            ["bash", str(SHIM), *args],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )  # return code is the contract under test
 
     def test_unknown_arg_exits_2_with_usage(self):
         """An unrecognized flag is a usage error (exit 2, like the seeder's
@@ -55,6 +61,7 @@ class ShimCase(unittest.TestCase):
 
     def setUp(self):
         import tempfile
+
         self.tmp = tempfile.mkdtemp()
 
     def _dead_socket_env(self):
@@ -62,6 +69,7 @@ class ShimCase(unittest.TestCase):
         tests; HERDR_SOCKET_PATH pointed at nothing makes the exec'd python
         fail harmlessly at connect -- AFTER the starter logic under test."""
         import os
+
         env = dict(os.environ)
         env["HERDR_SOCKET_PATH"] = str(pathlib.Path(self.tmp) / "no-such.sock")
         return env
@@ -77,15 +85,21 @@ class ShimCase(unittest.TestCase):
         env = self._dead_socket_env()
         env["HERDR_PLUGIN_CONFIG_DIR"] = str(cfgdir)
         toml = cfgdir / "projects.toml"
-        r = subprocess.run(["bash", str(SHIM)],
-                           capture_output=True, text=True, timeout=60, env=env)
+        r = subprocess.run(
+            ["bash", str(SHIM)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+            check=False,
+        )  # return code is the contract under test
         self.assertTrue(toml.exists(), "starter was not written")
         self.assertIn("starter config written to", r.stdout)
         body = toml.read_text()
         self.assertNotIn("__VERGENT_CONFIG_PATH__", body)  # substituted
-        self.assertIn(str(toml), body)                     # absolute path present
-        self.assertEqual(body.count(str(toml)), 3)         # comment x2 + pane command
-        self.assertIn("vergent-start-here", body)          # the welcome Space
+        self.assertIn(str(toml), body)  # absolute path present
+        self.assertEqual(body.count(str(toml)), 3)  # comment x2 + pane command
+        self.assertIn("vergent-start-here", body)  # the welcome Space
 
     def test_existing_config_is_never_overwritten(self):
         """The starter is gated on absence: an existing file (even a
@@ -93,9 +107,14 @@ class ShimCase(unittest.TestCase):
         that clobbers user data would be worse than no onboarding."""
         toml = pathlib.Path(self.tmp) / "projects.toml"
         toml.write_text('sentinel = "mine"\n')
-        r = subprocess.run(["bash", str(SHIM), "--toml", str(toml)],
-                           capture_output=True, text=True, timeout=60,
-                           env=self._dead_socket_env())
+        r = subprocess.run(
+            ["bash", str(SHIM), "--toml", str(toml)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=self._dead_socket_env(),
+            check=False,
+        )  # return code is the contract under test
         self.assertEqual(toml.read_text(), 'sentinel = "mine"\n')
         self.assertNotIn("starter config written", r.stdout)
 
@@ -104,20 +123,25 @@ class ShimCase(unittest.TestCase):
         one workspace, one tab, one pane carrying the welcome command (the
         command one-shot delivers it exactly once -- no new machinery)."""
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
-            "v_starter_test", str(SHIM.parents[1] / "bin" / "vergent.py"))
+            "v_starter_test", str(SHIM.parents[1] / "bin" / "vergent.py")
+        )
         m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(m)
         body = STARTER.read_text().replace(
-            "__VERGENT_CONFIG_PATH__", str(pathlib.Path(self.tmp) / "p.toml"))
+            "__VERGENT_CONFIG_PATH__", str(pathlib.Path(self.tmp) / "p.toml")
+        )
         target = pathlib.Path(self.tmp) / "resolved-starter.toml"
         target.write_text(body)
         model = m.load_model(str(target))
         (ws,) = model["workspaces"]
         (tab,) = ws["tabs"]
         (pane,) = tab["panes"]
-        self.assertEqual((ws["label"], tab["label"], pane["name"]),
-                         ("vergent-start-here", "read me", "welcome"))
+        self.assertEqual(
+            (ws["label"], tab["label"], pane["name"]),
+            ("vergent-start-here", "read me", "welcome"),
+        )
         # the welcome names the config file it cats (substitution applied)
         self.assertIn(str(pathlib.Path(self.tmp) / "p.toml"), pane["command"])
 

@@ -19,8 +19,7 @@ class SocketCase(unittest.TestCase):
         two fakes must never share a socket file. The client is built from
         setUp's module (`module=self.m`) so identity-sensitive asserts --
         assertRaises on self.m.HerdrError -- see the same load."""
-        return harness.make_env(self, fake=fake, module=self.m,
-                                timeout=timeout)[1:]
+        return harness.make_env(self, fake=fake, module=self.m, timeout=timeout)[1:]
 
     def test_roundtrip(self):
         r = self.client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
@@ -83,7 +82,9 @@ class SocketCase(unittest.TestCase):
                 try:
                     buf = conn.recv(65536)
                     line, _ = buf.split(b"\n", 1)
-                    conn.sendall(json.dumps(self._dispatch(json.loads(line))).encode() + b"\n")
+                    conn.sendall(
+                        json.dumps(self._dispatch(json.loads(line))).encode() + b"\n"
+                    )
                 except (OSError, ValueError):
                     pass
                 finally:
@@ -96,15 +97,18 @@ class SocketCase(unittest.TestCase):
         # connection, not surface the server's close as an error.
         listing = client.call("tab.list", {"workspace_id": ws_id})
         self.assertEqual(listing["tabs"][0]["workspace_id"], ws_id)
-        self.assertEqual([m for m, _ in fake.calls],
-                         ["workspace.create", "tab.list"])
+        self.assertEqual([m for m, _ in fake.calls], ["workspace.create", "tab.list"])
 
     def test_layout_apply_replacement(self):
         r = self.client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         ws_id, root_tab = r["workspace"]["workspace_id"], r["tab"]["tab_id"]
-        tree = {"type": "split", "direction": "right", "ratio": 0.5,
-                "first": {"type": "pane", "label": "a", "cwd": "/tmp"},
-                "second": {"type": "pane", "label": "b", "cwd": "/tmp"}}
+        tree = {
+            "type": "split",
+            "direction": "right",
+            "ratio": 0.5,
+            "first": {"type": "pane", "label": "a", "cwd": "/tmp"},
+            "second": {"type": "pane", "label": "b", "cwd": "/tmp"},
+        }
         self.client.call("layout.apply", {"tab_id": root_tab, "root": tree})
         self.assertNotIn(root_tab, self.fake.tabs)  # old tab closed
         new_tabs = [t for t in self.fake.tabs.values() if t["workspace_id"] == ws_id]
@@ -124,13 +128,17 @@ class SocketCase(unittest.TestCase):
 
         class Noisy(fake_herdr.FakeHerdr):
             def pre_reply(self, conn, req):
-                conn.sendall(json.dumps({"event": "pane.output",
-                                         "data": "noise"}).encode() + b"\n")
+                conn.sendall(
+                    json.dumps({"event": "pane.output", "data": "noise"}).encode()
+                    + b"\n"
+                )
 
         fake, client = self._spawn(Noisy())
         r = client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         self.assertEqual(r["workspace"]["label"], "W")
-        self.assertEqual(fake.calls, [("workspace.create", {"label": "W", "cwd": "/tmp"})])
+        self.assertEqual(
+            fake.calls, [("workspace.create", {"label": "W", "cwd": "/tmp"})]
+        )
 
     def test_garbled_frames_raise_herdr_error_naming_the_method(self):
         """Both garble shapes must land in the same HerdrError, never as a
@@ -147,10 +155,10 @@ class SocketCase(unittest.TestCase):
             with self.subTest(case=name):
 
                 class Garbled(fake_herdr.FakeHerdr):
-                    def pre_reply(self, conn, req):
-                        conn.sendall(frame)
+                    def pre_reply(self, conn, req, _frame=frame):
+                        conn.sendall(_frame)
 
-                fake, client = self._spawn(Garbled())
+                _fake, client = self._spawn(Garbled())
                 with self.assertRaises(self.m.HerdrError) as cm:
                     client.call("workspace.list")
                 msg = str(cm.exception)
@@ -165,8 +173,9 @@ class SocketCase(unittest.TestCase):
         r = self.client.call("workspace.create", {"label": "W", "cwd": "/tmp"})
         pid = r["root_pane"]["pane_id"]
         with self.assertRaises(self.m.HerdrError) as cm:
-            self.client.call("pane.send_keys", {"pane_id": pid,
-                                                "keys": ["echo hi", "Enter"]})
+            self.client.call(
+                "pane.send_keys", {"pane_id": pid, "keys": ["echo hi", "Enter"]}
+            )
         self.assertIn("unsupported key echo hi", str(cm.exception))
         self.assertIsNone(self.fake.panes[pid].get("typed"))  # nothing applied
 
