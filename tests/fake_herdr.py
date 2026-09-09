@@ -20,6 +20,7 @@ class FakeHerdr:
         self.tmpdir = None
         self.path = None
         self._sock = None
+        self._serve_thread = None
 
     def start(self):
         assert self.tmpdir, "set fake.tmpdir before start()"
@@ -31,23 +32,47 @@ class FakeHerdr:
         srv.listen(4)
         self.path = path
         self._sock = srv
-        threading.Thread(target=self._serve, daemon=True).start()
+        self._serve_thread = threading.Thread(target=self._serve, daemon=True)
+        self._serve_thread.start()
         return path
 
     def fail_next(self, method, message="scripted failure"):
         self._fail = (method, message)
 
     def stop(self):
-        # Close the listener so the accept thread exits: deterministic
-        # teardown, instead of leaving the thread parked in accept().
+        # Deterministic teardown, in the only order that IS deterministic:
+        # close the listener, then JOIN the accept thread. Merely closing
+        # is not enough -- CI (slow 2vcpu, Python 3.14) proved a thread can
+        # be between the loop check and accept() when stop() nulls _sock,
+        # dying on AttributeError while still draining the backlog, i.e. a
+        # "stopped" fake could still serve a LATER test's request with
+        # stale state. Joining makes a stopped fake provably inert before
+        # the next fake starts.
         if self._sock is not None:
+            # shutdown() before close(): on Linux, close() alone does NOT
+            # reliably wake a thread blocked in accept() (the fd is marked
+            # closed but the blocked call may sleep on) -- shutdown(SHUT_RDWR)
+            # is what breaks the accept loose with an OSError.
+            try:
+                self._sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass  # already closed by the peer side of the lifecycle
             self._sock.close()
             self._sock = None
+        if self._serve_thread is not None:
+            self._serve_thread.join(timeout=5)
+            self._serve_thread = None
 
     def _serve(self):
         while True:
             try:
-                conn, _ = self._sock.accept()
+                # Bind _sock LOCALLY inside the loop: stop() may null it
+                # between iterations; a thread that already passed the
+                # check must not touch the closed socket's attribute.
+                sock = self._sock
+                if sock is None:
+                    return
+                conn, _ = sock.accept()
             except OSError:
                 return
             threading.Thread(
